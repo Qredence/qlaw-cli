@@ -1,7 +1,7 @@
 # qlaw-cli
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Version](https://img.shields.io/badge/version-0.1.2-blue.svg)](https://github.com/qredence/qlaw-cli/releases)
+[![Version](https://img.shields.io/badge/version-0.1.2-blue.svg)](https://github.com/Qredence/qlaw-cli/releases)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 [![Built with Bun](https://img.shields.io/badge/Built%20with-Bun-f472b6.svg)](https://bun.sh)
 [![Code of Conduct](https://img.shields.io/badge/Code%20of-Conduct-blueviolet.svg)](CODE_OF_CONDUCT.md)
@@ -70,7 +70,7 @@ If you want to contribute or develop locally:
 
 ```bash
 # Clone the repository
-git clone https://github.com/qredence/qlaw-cli.git
+git clone https://github.com/Qredence/qlaw-cli.git
 cd qlaw-cli
 
 # Install dependencies
@@ -193,4 +193,4 @@ Special thanks to the OpenTUI team for creating such a powerful and elegant fram
 
 ---
 
-**Made with ❤️ by [Qredence](https://github.com/qredence)**
+**Made with ❤️ by [Qredence](https://github.com/Qredence)**

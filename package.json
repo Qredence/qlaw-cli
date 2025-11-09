@@ -15,12 +15,15 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/qredence/qlaw-cli.git"
+    "url": "git+https://github.com/Qredence/qlaw-cli.git"
   },
   "bugs": {
-    "url": "https://github.com/qredence/qlaw-cli/issues"
+    "url": "https://github.com/Qredence/qlaw-cli/issues"
   },
-  "homepage": "https://github.com/qredence/qlaw-cli#readme",
+  "homepage": "https://github.com/Qredence/qlaw-cli#readme",
+  "publishConfig": {
+    "provenance": true
+  },
   "author": "Qredence",
   "keywords": [
     "cli",
