@@ -170,6 +170,7 @@ We welcome contributions! Please see:
 - **[Contributing Guide](./CONTRIBUTING.md)** - How to contribute
 - **[Code of Conduct](./CODE_OF_CONDUCT.md)** - Community standards
 - **[Security Policy](./SECURITY.md)** - Reporting vulnerabilities
+- **[Publishing Guide](./docs/PUBLISHING.md)** - For maintainers: How to publish releases to npm
 
 ## 📄 License
 
