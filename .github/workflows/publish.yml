@@ -66,7 +66,7 @@ jobs:
 
             - name: Publish to npm (with provenance)
               if: steps.version-check.outputs.version_exists == 'false'
-              run: npm publish --provenance
+              run: npm publish --provenance --access public
 
             - name: Create GitHub Release
               if: steps.version-check.outputs.version_exists == 'false'
