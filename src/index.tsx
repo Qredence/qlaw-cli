@@ -1,84 +1,98 @@
-import { TextAttributes, createCliRenderer } from "@opentui/core"
-import { createRoot, useKeyboard, useRenderer } from "@opentui/react"
-import { useCallback, useEffect, useRef, useState } from "react"
+#!/usr/bin/env bun
+import { TextAttributes, createCliRenderer } from "@opentui/core";
+import { createRoot, useKeyboard, useRenderer } from "@opentui/react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 interface Message {
-  id: string
-  role: "user" | "assistant" | "system"
-  content: string
-  timestamp: Date
+  id: string;
+  role: "user" | "assistant" | "system";
+  content: string;
+  timestamp: Date;
 }
 
 interface Session {
-  id: string
-  name: string
-  messages: Message[]
-  createdAt: Date
-  updatedAt: Date
+  id: string;
+  name: string;
+  messages: Message[];
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 interface AppSettings {
-  apiKey?: string
-  endpoint?: string
-  model?: string
-  theme: "dark" | "light"
-  showTimestamps: boolean
-  autoScroll: boolean
+  apiKey?: string;
+  endpoint?: string;
+  model?: string;
+  theme: "dark" | "light";
+  showTimestamps: boolean;
+  autoScroll: boolean;
 }
 
 interface CustomCommand {
-  id: string
-  name: string
-  description: string
-  command: string
+  id: string;
+  name: string;
+  description: string;
+  command: string;
 }
 
 // --- OpenAI Responses API (streaming) integration ---
-const OPENAI_BASE_URL = process.env.OPENAI_BASE_URL
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY
-const OPENAI_MODEL = process.env.OPENAI_MODEL
+const OPENAI_BASE_URL = process.env.OPENAI_BASE_URL;
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+const OPENAI_MODEL = process.env.OPENAI_MODEL;
 
-function getAuthHeader(baseUrl: string | undefined, apiKey: string): Record<string, string> {
+function getAuthHeader(
+  baseUrl: string | undefined,
+  apiKey: string
+): Record<string, string> {
   // Use Azure-compatible header if the base URL looks like Azure; otherwise standard Bearer
-  if (baseUrl && (baseUrl.includes("azure.com") || baseUrl.includes("/openai/"))) {
-    return { "api-key": apiKey }
+  if (
+    baseUrl &&
+    (baseUrl.includes("azure.com") || baseUrl.includes("/openai/"))
+  ) {
+    return { "api-key": apiKey };
   }
-  return { Authorization: `Bearer ${apiKey}` }
+  return { Authorization: `Bearer ${apiKey}` };
 }
 
 // Build a plain-text prompt from history for broad compatibility with proxies
 function buildResponsesInput(history: Message[]) {
-  const lines: string[] = []
+  const lines: string[] = [];
   for (const m of history) {
-    const role = m.role === "assistant" ? "Assistant" : m.role === "system" ? "System" : "User"
-    lines.push(`${role}: ${m.content}`)
+    const role =
+      m.role === "assistant"
+        ? "Assistant"
+        : m.role === "system"
+        ? "System"
+        : "User";
+    lines.push(`${role}: ${m.content}`);
   }
-  lines.push("Assistant:")
-  return lines.join("\n\n")
+  lines.push("Assistant:");
+  return lines.join("\n\n");
 }
 
 async function streamResponseFromOpenAI(params: {
-  history: Message[]
-  onDelta: (text: string) => void
-  onError: (err: Error) => void
-  onDone: () => void
+  history: Message[];
+  onDelta: (text: string) => void;
+  onError: (err: Error) => void;
+  onDone: () => void;
 }) {
-  const { history, onDelta, onError, onDone } = params
+  const { history, onDelta, onError, onDone } = params;
 
   if (!OPENAI_BASE_URL || !OPENAI_API_KEY || !OPENAI_MODEL) {
-    onError(new Error("Missing OPENAI_BASE_URL, OPENAI_API_KEY, or OPENAI_MODEL"))
-    onDone()
-    return
+    onError(
+      new Error("Missing OPENAI_BASE_URL, OPENAI_API_KEY, or OPENAI_MODEL")
+    );
+    onDone();
+    return;
   }
 
   try {
-    const authHeaders = getAuthHeader(OPENAI_BASE_URL, OPENAI_API_KEY)
+    const authHeaders = getAuthHeader(OPENAI_BASE_URL, OPENAI_API_KEY);
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
       Accept: "text/event-stream",
       ...authHeaders,
-    }
-    
+    };
+
     const res = await fetch(`${OPENAI_BASE_URL.replace(/\/$/, "")}/responses`, {
       method: "POST",
       headers,
@@ -87,41 +101,43 @@ async function streamResponseFromOpenAI(params: {
         input: buildResponsesInput(history),
         stream: true,
       }),
-    })
+    });
 
     if (!res.ok || !res.body) {
-      const text = await res.text().catch(() => "")
-      throw new Error(`HTTP ${res.status} ${res.statusText}${text ? ` - ${text}` : ""}`)
+      const text = await res.text().catch(() => "");
+      throw new Error(
+        `HTTP ${res.status} ${res.statusText}${text ? ` - ${text}` : ""}`
+      );
     }
 
-    const reader = res.body.getReader()
-    const decoder = new TextDecoder()
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
 
-    let buf = ""
-    let currentEvent: string | null = null
+    let buf = "";
+    let currentEvent: string | null = null;
 
     // SSE parsing: events separated by blank lines; each event has optional "event:" and one or more "data:" lines
     while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-      buf += decoder.decode(value, { stream: true })
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
 
       // Split by lines and process whenever we hit a blank line
-      const parts = buf.split(/\r?\n/)
+      const parts = buf.split(/\r?\n/);
       // Keep the last partial line in buffer
-      buf = parts.pop() || ""
+      buf = parts.pop() || "";
 
       for (const line of parts) {
         if (line.startsWith("event:")) {
-          currentEvent = line.slice(6).trim()
+          currentEvent = line.slice(6).trim();
         } else if (line.startsWith("data:")) {
-          const jsonStr = line.slice(5).trim()
+          const jsonStr = line.slice(5).trim();
           if (jsonStr === "[DONE]") {
-            currentEvent = null
-            continue
+            currentEvent = null;
+            continue;
           }
           try {
-            const payload = jsonStr ? JSON.parse(jsonStr) : null
+            const payload = jsonStr ? JSON.parse(jsonStr) : null;
             // Handle common Responses API streaming events
             // Prefer output_text.delta/ message delta styles
             if (
@@ -134,18 +150,20 @@ async function streamResponseFromOpenAI(params: {
                 payload?.text ??
                 payload?.content ??
                 payload?.output_text?.delta ??
-                ""
-              if (delta) onDelta(delta)
+                "";
+              if (delta) onDelta(delta);
             } else if (currentEvent === "response.error") {
-              const msg = payload?.error?.message || payload?.message || "Unknown error"
-              throw new Error(msg)
+              const msg =
+                payload?.error?.message || payload?.message || "Unknown error";
+              throw new Error(msg);
             } else if (currentEvent === "response.completed") {
               // completion signal
-              currentEvent = null
+              currentEvent = null;
             } else if (payload && typeof payload === "object") {
               // Fallback: if we see any payload with text, append
-              const fallback = payload?.delta ?? payload?.text ?? payload?.content
-              if (typeof fallback === "string" && fallback) onDelta(fallback)
+              const fallback =
+                payload?.delta ?? payload?.text ?? payload?.content;
+              if (typeof fallback === "string" && fallback) onDelta(fallback);
             }
           } catch (e: any) {
             // Ignore parse errors for keep-alive/comment lines
@@ -154,23 +172,28 @@ async function streamResponseFromOpenAI(params: {
           }
         } else if (line.trim() === "") {
           // End of event
-          currentEvent = null
+          currentEvent = null;
         }
       }
     }
 
-    onDone()
+    onDone();
   } catch (err: any) {
-    onError(err instanceof Error ? err : new Error(String(err)))
-    onDone()
+    onError(err instanceof Error ? err : new Error(String(err)));
+    onDone();
   }
 }
 
-type InputMode = "chat" | "command" | "mention" | "model-input" | "settings-menu"
+type InputMode =
+  | "chat"
+  | "command"
+  | "mention"
+  | "model-input"
+  | "settings-menu";
 
-const STORAGE_KEY_SETTINGS = "qlaw_settings"
-const STORAGE_KEY_SESSIONS = "qlaw_sessions"
-const STORAGE_KEY_COMMANDS = "qlaw_custom_commands"
+const STORAGE_KEY_SETTINGS = "qlaw_settings";
+const STORAGE_KEY_SESSIONS = "qlaw_sessions";
+const STORAGE_KEY_COMMANDS = "qlaw_custom_commands";
 
 // Design tokens - Claude Code style
 const COLORS = {
@@ -190,72 +213,71 @@ const COLORS = {
   border: "#3A3A3A",
   success: "#7AC47A",
   error: "#E57373",
-}
-
+};
 
 // Helper functions for localStorage
 function loadSettings(): AppSettings {
   try {
-    const stored = localStorage.getItem(STORAGE_KEY_SETTINGS)
+    const stored = localStorage.getItem(STORAGE_KEY_SETTINGS);
     if (stored) {
-      return { ...defaultSettings, ...JSON.parse(stored) }
+      return { ...defaultSettings, ...JSON.parse(stored) };
     }
   } catch (e) {
-    console.error("Failed to load settings:", e)
+    console.error("Failed to load settings:", e);
   }
-  return defaultSettings
+  return defaultSettings;
 }
 
 function saveSettings(settings: AppSettings) {
   try {
-    localStorage.setItem(STORAGE_KEY_SETTINGS, JSON.stringify(settings))
+    localStorage.setItem(STORAGE_KEY_SETTINGS, JSON.stringify(settings));
   } catch (e) {
-    console.error("Failed to save settings:", e)
+    console.error("Failed to save settings:", e);
   }
 }
 
 function loadSessions(): Session[] {
   try {
-    const stored = localStorage.getItem(STORAGE_KEY_SESSIONS)
+    const stored = localStorage.getItem(STORAGE_KEY_SESSIONS);
     if (stored) {
       return JSON.parse(stored, (key, value) => {
         if (key === "createdAt" || key === "updatedAt" || key === "timestamp") {
-          return new Date(value)
+          return new Date(value);
         }
-        return value
-      })
+        return value;
+      });
     }
   } catch (e) {
-    console.error("Failed to load sessions:", e)
+    console.error("Failed to load sessions:", e);
   }
-  return []
+  return [];
 }
 
 function saveSessions(sessions: Session[]) {
   try {
-    localStorage.setItem(STORAGE_KEY_SESSIONS, JSON.stringify(sessions))
+    localStorage.setItem(STORAGE_KEY_SESSIONS, JSON.stringify(sessions));
   } catch (e) {
-    console.error("Failed to save sessions:", e)
+    console.error("Failed to save sessions:", e);
   }
 }
 
 function loadCustomCommands(): CustomCommand[] {
   try {
-    const stored = localStorage.getItem(STORAGE_KEY_COMMANDS)
+    const stored = localStorage.getItem(STORAGE_KEY_COMMANDS);
     if (stored) {
-      return JSON.parse(stored)
+      return JSON.parse(stored);
     }
   } catch (e) {
-    console.error("Failed to load custom commands:", e)
+    console.error("Failed to load custom commands:", e);
   }
-  return []
+  return [];
 }
 
 function saveCustomCommands(commands: CustomCommand[]) {
   try {
-    localStorage.setItem(STORAGE_KEY_COMMANDS, JSON.stringify(commands))
+    localStorage.setItem(STORAGE_KEY_COMMANDS, JSON.stringify(commands));
   } catch (e) {
-    console.error("Failed to save custom commands:", e)
+    console.error("Failed to save custom commands:", e);
   }
 }
 
@@ -266,46 +288,47 @@ const defaultSettings: AppSettings = {
   model: OPENAI_MODEL,
   endpoint: OPENAI_BASE_URL,
   apiKey: OPENAI_API_KEY,
-}
+};
 
 function App() {
-  const renderer = useRenderer()
-  const [messages, setMessages] = useState<Message[]>([])
-  const [input, setInput] = useState("")
-  const [isProcessing, setIsProcessing] = useState(false)
-  const [inputMode, setInputMode] = useState<InputMode>("chat")
-  const [suggestions, setSuggestions] = useState<string[]>([])
-  const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(0)
-  const [settings, setSettings] = useState<AppSettings>(() => loadSettings())
-  const [sessions, setSessions] = useState<Session[]>(() => loadSessions())
-  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null)
-  const [customCommands, setCustomCommands] = useState<CustomCommand[]>(() => loadCustomCommands())
-  const [showSessionList, setShowSessionList] = useState(false)
-  const [showSettingsMenu, setShowSettingsMenu] = useState(false)
-  const scrollBoxRef = useRef<any>(null)
+  const renderer = useRenderer();
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [input, setInput] = useState("");
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [inputMode, setInputMode] = useState<InputMode>("chat");
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(0);
+  const [settings, setSettings] = useState<AppSettings>(() => loadSettings());
+  const [sessions, setSessions] = useState<Session[]>(() => loadSessions());
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+  const [customCommands, setCustomCommands] = useState<CustomCommand[]>(() =>
+    loadCustomCommands()
+  );
+  const [showSessionList, setShowSessionList] = useState(false);
+  const [showSettingsMenu, setShowSettingsMenu] = useState(false);
+  const scrollBoxRef = useRef<any>(null);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
     if (settings.autoScroll && scrollBoxRef.current) {
-      scrollBoxRef.current.scrollToBottom?.()
+      scrollBoxRef.current.scrollToBottom?.();
     }
-  }, [messages, settings.autoScroll])
-
+  }, [messages, settings.autoScroll]);
 
   // Save settings when changed
   useEffect(() => {
-    saveSettings(settings)
-  }, [settings])
+    saveSettings(settings);
+  }, [settings]);
 
   // Save sessions when changed
   useEffect(() => {
-    saveSessions(sessions)
-  }, [sessions])
+    saveSessions(sessions);
+  }, [sessions]);
 
   // Save custom commands when changed
   useEffect(() => {
-    saveCustomCommands(customCommands)
-  }, [customCommands])
+    saveCustomCommands(customCommands);
+  }, [customCommands]);
 
   // Save current session when messages change
   useEffect(() => {
@@ -316,15 +339,15 @@ function App() {
             ? { ...s, messages, updatedAt: new Date() }
             : s
         )
-      )
+      );
     }
-  }, [messages, currentSessionId])
+  }, [messages, currentSessionId]);
 
   // Command detection
   useEffect(() => {
     if (input.startsWith("/")) {
-      setInputMode("command")
-      const query = input.slice(1).toLowerCase()
+      setInputMode("command");
+      const query = input.slice(1).toLowerCase();
       const builtInCommands = [
         "clear",
         "help",
@@ -336,92 +359,96 @@ function App() {
         "commands",
         "export",
         "theme",
-      ]
-      const customCommandNames = customCommands.map((c) => c.name)
-      const allCommands = [...builtInCommands, ...customCommandNames]
-      const filtered = allCommands.filter((cmd) => cmd.startsWith(query))
-      setSuggestions(filtered)
-      setSelectedSuggestionIndex(0) // Reset selection when suggestions change
+      ];
+      const customCommandNames = customCommands.map((c) => c.name);
+      const allCommands = [...builtInCommands, ...customCommandNames];
+      const filtered = allCommands.filter((cmd) => cmd.startsWith(query));
+      setSuggestions(filtered);
+      setSelectedSuggestionIndex(0); // Reset selection when suggestions change
     } else if (input.startsWith("@")) {
-      setInputMode("mention")
-      const query = input.slice(1).toLowerCase()
-      const availableMentions = ["context", "file", "code", "docs"]
-      const filtered = availableMentions.filter((m) => m.startsWith(query))
-      setSuggestions(filtered)
-      setSelectedSuggestionIndex(0)
+      setInputMode("mention");
+      const query = input.slice(1).toLowerCase();
+      const availableMentions = ["context", "file", "code", "docs"];
+      const filtered = availableMentions.filter((m) => m.startsWith(query));
+      setSuggestions(filtered);
+      setSelectedSuggestionIndex(0);
     } else {
-      setInputMode("chat")
-      setSuggestions([])
-      setSelectedSuggestionIndex(0)
+      setInputMode("chat");
+      setSuggestions([]);
+      setSelectedSuggestionIndex(0);
     }
-  }, [input, customCommands])
+  }, [input, customCommands]);
 
   useKeyboard((key) => {
     // Handle arrow keys for suggestion navigation
     if (suggestions.length > 0 && (key.name === "up" || key.name === "down")) {
       if (key.name === "up") {
-        setSelectedSuggestionIndex((prev) => (prev > 0 ? prev - 1 : suggestions.length - 1))
+        setSelectedSuggestionIndex((prev) =>
+          prev > 0 ? prev - 1 : suggestions.length - 1
+        );
       } else if (key.name === "down") {
-        setSelectedSuggestionIndex((prev) => (prev < suggestions.length - 1 ? prev + 1 : 0))
+        setSelectedSuggestionIndex((prev) =>
+          prev < suggestions.length - 1 ? prev + 1 : 0
+        );
       }
-      return
+      return;
     }
 
     // Tab to autocomplete selected suggestion
     if (suggestions.length > 0 && key.name === "tab") {
-      const selected = suggestions[selectedSuggestionIndex]
+      const selected = suggestions[selectedSuggestionIndex];
       if (inputMode === "command") {
-        setInput(`/${selected}`)
+        setInput(`/${selected}`);
       } else if (inputMode === "mention") {
-        setInput(`@${selected}`)
+        setInput(`@${selected}`);
       }
-      return
+      return;
     }
 
     // Close overlays with Escape
     if (key.name === "escape") {
       if (showSessionList) {
-        setShowSessionList(false)
-        return
+        setShowSessionList(false);
+        return;
       }
       if (showSettingsMenu) {
-        setShowSettingsMenu(false)
-        return
+        setShowSettingsMenu(false);
+        return;
       }
-      renderer?.stop()
-      return
+      renderer?.stop();
+      return;
     }
 
     // Toggle debug console with Ctrl+K
     if (key.ctrl && key.name === "k") {
-      renderer?.toggleDebugOverlay()
-      renderer?.console.toggle()
+      renderer?.toggleDebugOverlay();
+      renderer?.console.toggle();
     }
 
     // Exit with Ctrl+C
     if (key.ctrl && key.name === "c") {
-      renderer?.stop()
+      renderer?.stop();
     }
-  })
+  });
 
   const handleInput = useCallback((value: string) => {
-    setInput(value)
-  }, [])
+    setInput(value);
+  }, []);
 
   const executeCommand = useCallback(
     (command: string, args?: string) => {
-      const cmd = command.toLowerCase()
+      const cmd = command.toLowerCase();
       const systemMsg: Message = {
         id: Date.now().toString(),
         role: "system",
         content: "",
         timestamp: new Date(),
-      }
+      };
 
       switch (cmd) {
         case "clear":
-          setMessages([])
-          return
+          setMessages([]);
+          return;
 
         case "help":
           systemMsg.content = `Available commands:
@@ -440,26 +467,27 @@ Mentions:
 @context - Add context
 @file - Reference file
 @code - Code snippet
-@docs - Documentation`
-          break
+@docs - Documentation`;
+          break;
 
         case "model":
           if (args?.trim()) {
-            setSettings((prev) => ({ ...prev, model: args.trim() }))
-            systemMsg.content = `Model set to: ${args.trim()}`
+            setSettings((prev) => ({ ...prev, model: args.trim() }));
+            systemMsg.content = `Model set to: ${args.trim()}`;
           } else {
-            setInputMode("model-input")
-            systemMsg.content = "Enter model name (e.g., gpt-4, claude-3-opus-20240229):"
+            setInputMode("model-input");
+            systemMsg.content =
+              "Enter model name (e.g., gpt-4, claude-3-opus-20240229):";
           }
-          break
+          break;
 
         case "settings":
-          setShowSettingsMenu(true)
-          return
+          setShowSettingsMenu(true);
+          return;
 
         case "sessions":
-          setShowSessionList(true)
-          return
+          setShowSessionList(true);
+          return;
 
         case "status":
           systemMsg.content = `Current Configuration:
@@ -473,8 +501,8 @@ Auto-scroll:  ${settings.autoScroll ? "Enabled" : "Disabled"}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Sessions:     ${sessions.length} saved
 Messages:     ${messages.length} in current chat
-Custom Cmds:  ${customCommands.length} defined`
-          break
+Custom Cmds:  ${customCommands.length} defined`;
+          break;
 
         case "terminal-setup":
           systemMsg.content = `Terminal Keybindings Setup:
@@ -499,8 +527,8 @@ Windows Terminal:
 
 Current shortcuts:
   Ctrl+C / Esc  - Exit
-  Ctrl+K        - Toggle debug console`
-          break
+  Ctrl+K        - Toggle debug console`;
+          break;
 
         case "commands":
           if (customCommands.length === 0) {
@@ -512,20 +540,23 @@ To add a command, use:
 /commands add <name> <description> <command>
 
 Example:
-/commands add git-status "Show git status" "git status"`
+/commands add git-status "Show git status" "git status"`;
           } else {
             const cmdList = customCommands
-              .map((c, i) => `${i + 1}. /${c.name}\n   ${c.description}\n   → ${c.command}`)
-              .join("\n\n")
-            systemMsg.content = `Custom Commands:\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n${cmdList}\n\nUse: /commands remove <name>`
+              .map(
+                (c, i) =>
+                  `${i + 1}. /${c.name}\n   ${c.description}\n   → ${c.command}`
+              )
+              .join("\n\n");
+            systemMsg.content = `Custom Commands:\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n${cmdList}\n\nUse: /commands remove <name>`;
           }
-          break
+          break;
 
         case "theme":
-          const newTheme = settings.theme === "dark" ? "light" : "dark"
-          setSettings((prev) => ({ ...prev, theme: newTheme }))
-          systemMsg.content = `Theme changed to: ${newTheme}`
-          break
+          const newTheme = settings.theme === "dark" ? "light" : "dark";
+          setSettings((prev) => ({ ...prev, theme: newTheme }));
+          systemMsg.content = `Theme changed to: ${newTheme}`;
+          break;
 
         case "export":
           const exportData = {
@@ -535,73 +566,80 @@ Example:
             },
             messages,
             settings,
-          }
-          systemMsg.content = `Chat export:\n${JSON.stringify(exportData, null, 2)}`
-          break
+          };
+          systemMsg.content = `Chat export:\n${JSON.stringify(
+            exportData,
+            null,
+            2
+          )}`;
+          break;
 
         default:
           // Check custom commands
-          const customCmd = customCommands.find((c) => c.name === cmd)
+          const customCmd = customCommands.find((c) => c.name === cmd);
           if (customCmd) {
-            systemMsg.content = `Executing: ${customCmd.command}\n(Custom command execution not yet implemented)`
+            systemMsg.content = `Executing: ${customCmd.command}\n(Custom command execution not yet implemented)`;
           } else {
-            systemMsg.content = `Unknown command: /${cmd}\nType /help for available commands`
+            systemMsg.content = `Unknown command: /${cmd}\nType /help for available commands`;
           }
       }
 
-      setMessages((prev) => [...prev, systemMsg])
+      setMessages((prev) => [...prev, systemMsg]);
     },
     [settings, sessions, messages, customCommands, currentSessionId]
-  )
+  );
 
   const handleSubmit = useCallback(() => {
-    if (isProcessing) return
+    if (isProcessing) return;
 
     // If suggestions are visible, select the highlighted suggestion
-    if (suggestions.length > 0 && (inputMode === "command" || inputMode === "mention")) {
-      const selected = suggestions[selectedSuggestionIndex]
+    if (
+      suggestions.length > 0 &&
+      (inputMode === "command" || inputMode === "mention")
+    ) {
+      const selected = suggestions[selectedSuggestionIndex];
       if (inputMode === "command" && selected) {
         // Execute the command immediately
-        executeCommand(selected, "")
-        setInput("")
-        setSuggestions([])
-        setInputMode("chat")
-        return
+        executeCommand(selected, "");
+        setInput("");
+        setSuggestions([]);
+        setInputMode("chat");
+        return;
       } else if (inputMode === "mention") {
         // For mentions, just complete the input
-        setInput(`@${selected} `)
-        setSuggestions([])
-        return
+        setInput(`@${selected} `);
+        setSuggestions([]);
+        return;
       }
     }
 
-    if (!input.trim()) return
+    if (!input.trim()) return;
 
     // Handle model input mode
     if (inputMode === "model-input") {
-      setSettings((prev) => ({ ...prev, model: input.trim() }))
+      setSettings((prev) => ({ ...prev, model: input.trim() }));
       const systemMsg: Message = {
         id: Date.now().toString(),
         role: "system",
         content: `Model set to: ${input.trim()}`,
         timestamp: new Date(),
-      }
-      setMessages((prev) => [...prev, systemMsg])
-      setInput("")
-      setInputMode("chat")
-      return
+      };
+      setMessages((prev) => [...prev, systemMsg]);
+      setInput("");
+      setInputMode("chat");
+      return;
     }
 
     // Handle commands
     if (input.startsWith("/")) {
-      const parts = input.slice(1).split(" ")
-      const cmd = parts[0]
-      const args = parts.slice(1).join(" ")
+      const parts = input.slice(1).split(" ");
+      const cmd = parts[0];
+      const args = parts.slice(1).join(" ");
       if (cmd) {
-        executeCommand(cmd, args)
+        executeCommand(cmd, args);
       }
-      setInput("")
-      return
+      setInput("");
+      return;
     }
 
     const userMessage: Message = {
@@ -609,53 +647,69 @@ Example:
       role: "user",
       content: input.trim(),
       timestamp: new Date(),
-    }
+    };
 
     // Prepare assistant message placeholder to stream into
-    const assistantMessageId = (Date.now() + 1).toString()
+    const assistantMessageId = (Date.now() + 1).toString();
     const assistantPlaceholder: Message = {
       id: assistantMessageId,
       role: "assistant",
       content: "",
       timestamp: new Date(),
-    }
+    };
 
     // Update UI immediately
-    setMessages((prev) => [...prev, userMessage, assistantPlaceholder])
-    setInput("")
-    setIsProcessing(true)
+    setMessages((prev) => [...prev, userMessage, assistantPlaceholder]);
+    setInput("");
+    setIsProcessing(true);
 
     // Build history for this turn (use current state + new user)
-    const historyForApi = [...messages, userMessage]
+    const historyForApi = [...messages, userMessage];
 
     // Stream from OpenAI Responses API
     streamResponseFromOpenAI({
       history: historyForApi,
       onDelta: (chunk) => {
         setMessages((prev) =>
-          prev.map((m) => (m.id === assistantMessageId ? { ...m, content: m.content + chunk } : m))
-        )
+          prev.map((m) =>
+            m.id === assistantMessageId
+              ? { ...m, content: m.content + chunk }
+              : m
+          )
+        );
       },
       onError: (err) => {
         setMessages((prev) =>
           prev.map((m) =>
-            m.id === assistantMessageId ? { ...m, content: m.content + `\n\n[Error] ${err.message}` } : m
+            m.id === assistantMessageId
+              ? { ...m, content: m.content + `\n\n[Error] ${err.message}` }
+              : m
           )
-        )
+        );
       },
       onDone: () => {
-        setIsProcessing(false)
+        setIsProcessing(false);
       },
-    })
-  }, [input, isProcessing, inputMode, executeCommand, messages, suggestions, selectedSuggestionIndex])
-
-
+    });
+  }, [
+    input,
+    isProcessing,
+    inputMode,
+    executeCommand,
+    messages,
+    suggestions,
+    selectedSuggestionIndex,
+  ]);
 
   // Show welcome screen if no messages
-  const showWelcome = messages.length === 0
+  const showWelcome = messages.length === 0;
 
   return (
-    <box flexDirection="column" flexGrow={1} style={{ backgroundColor: COLORS.bg.primary }}>
+    <box
+      flexDirection="column"
+      flexGrow={1}
+      style={{ backgroundColor: COLORS.bg.primary }}
+    >
       {/* Header */}
       <box
         style={{
@@ -711,15 +765,31 @@ Example:
                 }}
               >
                 {/* Simple title */}
-                <text content="QLAW CLI" style={{ fg: COLORS.text.primary, attributes: TextAttributes.BOLD, marginBottom: 1 }} />
+                <text
+                  content="QLAW CLI"
+                  style={{
+                    fg: COLORS.text.primary,
+                    attributes: TextAttributes.BOLD,
+                    marginBottom: 1,
+                  }}
+                />
 
                 <text
-                  content={`${process.cwd().replace(process.env.HOME || '', '~')}`}
-                  style={{ fg: COLORS.text.dim, attributes: TextAttributes.DIM, marginBottom: 1 }}
+                  content={`${process
+                    .cwd()
+                    .replace(process.env.HOME || "", "~")}`}
+                  style={{
+                    fg: COLORS.text.dim,
+                    attributes: TextAttributes.DIM,
+                    marginBottom: 1,
+                  }}
                 />
                 <text
                   content="SessionStart:Callback hook succeeded: Success"
-                  style={{ fg: COLORS.text.tertiary, attributes: TextAttributes.DIM }}
+                  style={{
+                    fg: COLORS.text.tertiary,
+                    attributes: TextAttributes.DIM,
+                  }}
                 />
               </box>
 
@@ -736,7 +806,11 @@ Example:
               >
                 <text
                   content="Tips for getting started"
-                  style={{ fg: COLORS.text.accent, attributes: TextAttributes.BOLD, marginBottom: 1 }}
+                  style={{
+                    fg: COLORS.text.accent,
+                    attributes: TextAttributes.BOLD,
+                    marginBottom: 1,
+                  }}
                 />
                 <text
                   content="Run /help to see commands. Type @ to reference context. Use ESC to exit."
@@ -747,47 +821,50 @@ Example:
           </box>
         ) : (
           <box flexDirection="column" style={{ width: "100%" }}>
-          {messages.map((message, index) => (
-            <box
-              key={message.id}
-              style={{
-                marginBottom: index < messages.length - 1 ? 3 : 0,
-                flexDirection: "column",
-              }}
-            >
-              {/* Message Header with Icon */}
-              <box style={{ marginBottom: 1 }}>
-                <text
-                  content="> "
-                  style={{
-                    fg: COLORS.text.secondary,
-                  }}
-                />
-                <text
-                  content={
-                    message.role === "user"
-                      ? message.content.substring(0, 80)
-                      : message.role === "system"
+            {messages.map((message, index) => (
+              <box
+                key={message.id}
+                style={{
+                  marginBottom: index < messages.length - 1 ? 3 : 0,
+                  flexDirection: "column",
+                }}
+              >
+                {/* Message Header with Icon */}
+                <box style={{ marginBottom: 1 }}>
+                  <text
+                    content="> "
+                    style={{
+                      fg: COLORS.text.secondary,
+                    }}
+                  />
+                  <text
+                    content={
+                      message.role === "user"
+                        ? message.content.substring(0, 80)
+                        : message.role === "system"
                         ? "System"
                         : "Assistant"
+                    }
+                    style={{
+                      fg: COLORS.text.primary,
+                    }}
+                  />
+                </box>
+
+                {/* Message Content */}
+                <text
+                  content={
+                    message.content ||
+                    (isProcessing && message.role === "assistant" ? "●" : "")
                   }
                   style={{
                     fg: COLORS.text.primary,
                   }}
                 />
+
+                {/* Timestamp - always hidden for cleaner look */}
               </box>
-
-              {/* Message Content */}
-              <text
-                content={message.content || (isProcessing && message.role === "assistant" ? "●" : "")}
-                style={{
-                  fg: COLORS.text.primary,
-                }}
-              />
-
-              {/* Timestamp - always hidden for cleaner look */}
-            </box>
-          ))}
+            ))}
           </box>
         )}
       </scrollbox>
@@ -818,19 +895,32 @@ Example:
               }}
             />
             {sessions.length === 0 ? (
-              <text content="No saved sessions" style={{ fg: COLORS.text.tertiary }} />
+              <text
+                content="No saved sessions"
+                style={{ fg: COLORS.text.tertiary }}
+              />
             ) : (
-              sessions.slice(-5).map((session, idx) => (
-                <text
-                  key={session.id}
-                  content={`${idx + 1}. ${session.name} (${session.messages.length} msgs, ${new Date(session.updatedAt).toLocaleDateString()})`}
-                  style={{ fg: COLORS.text.secondary, marginTop: 1 }}
-                />
-              ))
+              sessions
+                .slice(-5)
+                .map((session, idx) => (
+                  <text
+                    key={session.id}
+                    content={`${idx + 1}. ${session.name} (${
+                      session.messages.length
+                    } msgs, ${new Date(
+                      session.updatedAt
+                    ).toLocaleDateString()})`}
+                    style={{ fg: COLORS.text.secondary, marginTop: 1 }}
+                  />
+                ))
             )}
             <text
               content="\nPress ESC to close"
-              style={{ fg: COLORS.text.dim, attributes: TextAttributes.DIM, marginTop: 1 }}
+              style={{
+                fg: COLORS.text.dim,
+                attributes: TextAttributes.DIM,
+                marginTop: 1,
+              }}
             />
           </box>
         </box>
@@ -861,18 +951,43 @@ Example:
                 marginBottom: 1,
               }}
             />
-            <text content={`Model: ${settings.model || "Not set"}`} style={{ fg: COLORS.text.secondary, marginTop: 1 }} />
-            <text content={`Endpoint: ${settings.endpoint || "Not set"}`} style={{ fg: COLORS.text.secondary, marginTop: 1 }} />
             <text
-              content={`API Key: ${settings.apiKey ? "***" + settings.apiKey.slice(-4) : "Not set"}`}
+              content={`Model: ${settings.model || "Not set"}`}
               style={{ fg: COLORS.text.secondary, marginTop: 1 }}
             />
-            <text content={`Theme: ${settings.theme}`} style={{ fg: COLORS.text.secondary, marginTop: 1 }} />
-            <text content={`Timestamps: ${settings.showTimestamps ? "Shown" : "Hidden"}`} style={{ fg: COLORS.text.secondary, marginTop: 1 }} />
-            <text content={`Auto-scroll: ${settings.autoScroll ? "Enabled" : "Disabled"}`} style={{ fg: COLORS.text.secondary, marginTop: 1 }} />
+            <text
+              content={`Endpoint: ${settings.endpoint || "Not set"}`}
+              style={{ fg: COLORS.text.secondary, marginTop: 1 }}
+            />
+            <text
+              content={`API Key: ${
+                settings.apiKey ? "***" + settings.apiKey.slice(-4) : "Not set"
+              }`}
+              style={{ fg: COLORS.text.secondary, marginTop: 1 }}
+            />
+            <text
+              content={`Theme: ${settings.theme}`}
+              style={{ fg: COLORS.text.secondary, marginTop: 1 }}
+            />
+            <text
+              content={`Timestamps: ${
+                settings.showTimestamps ? "Shown" : "Hidden"
+              }`}
+              style={{ fg: COLORS.text.secondary, marginTop: 1 }}
+            />
+            <text
+              content={`Auto-scroll: ${
+                settings.autoScroll ? "Enabled" : "Disabled"
+              }`}
+              style={{ fg: COLORS.text.secondary, marginTop: 1 }}
+            />
             <text
               content="\nUse /model, /theme, /status to change settings\nPress ESC to close"
-              style={{ fg: COLORS.text.dim, attributes: TextAttributes.DIM, marginTop: 2 }}
+              style={{
+                fg: COLORS.text.dim,
+                attributes: TextAttributes.DIM,
+                marginTop: 2,
+              }}
             />
           </box>
         </box>
@@ -907,33 +1022,33 @@ Example:
             }}
           >
             {suggestions.map((suggestion, index) => {
-              const isSelected = index === selectedSuggestionIndex
-              const prefix = inputMode === "command" ? "/" : "@"
-              
+              const isSelected = index === selectedSuggestionIndex;
+              const prefix = inputMode === "command" ? "/" : "@";
+
               // Get description based on command
-              let description = ""
+              let description = "";
               if (inputMode === "command") {
                 const descriptions: Record<string, string> = {
-                  "clear": "Clear all messages",
-                  "help": "Show this help",
-                  "model": "Set the model name",
-                  "settings": "Configure application settings",
-                  "sessions": "List and select previous sessions",
-                  "status": "Show current status and configuration",
+                  clear: "Clear all messages",
+                  help: "Show this help",
+                  model: "Set the model name",
+                  settings: "Configure application settings",
+                  sessions: "List and select previous sessions",
+                  status: "Show current status and configuration",
                   "terminal-setup": "Configure terminal keybindings",
-                  "commands": "Manage custom commands",
-                  "export": "Export chat",
-                  "theme": "Toggle theme",
-                }
-                description = descriptions[suggestion] || "Custom command"
+                  commands: "Manage custom commands",
+                  export: "Export chat",
+                  theme: "Toggle theme",
+                };
+                description = descriptions[suggestion] || "Custom command";
               } else {
                 const descriptions: Record<string, string> = {
-                  "context": "Add context",
-                  "file": "Reference file",
-                  "code": "Code snippet",
-                  "docs": "Documentation",
-                }
-                description = descriptions[suggestion] || ""
+                  context: "Add context",
+                  file: "Reference file",
+                  code: "Code snippet",
+                  docs: "Documentation",
+                };
+                description = descriptions[suggestion] || "";
               }
 
               return (
@@ -942,14 +1057,18 @@ Example:
                   style={{
                     paddingLeft: 1,
                     paddingRight: 1,
-                    backgroundColor: isSelected ? COLORS.bg.hover : "transparent",
+                    backgroundColor: isSelected
+                      ? COLORS.bg.hover
+                      : "transparent",
                     marginTop: index > 0 ? 1 : 0,
                   }}
                 >
                   <text
                     content={`${prefix}${suggestion}`}
                     style={{
-                      fg: isSelected ? COLORS.text.accent : COLORS.text.secondary,
+                      fg: isSelected
+                        ? COLORS.text.accent
+                        : COLORS.text.secondary,
                       attributes: isSelected ? TextAttributes.BOLD : 0,
                       width: 20,
                     }}
@@ -963,7 +1082,7 @@ Example:
                     }}
                   />
                 </box>
-              )
+              );
             })}
           </box>
         )}
@@ -987,10 +1106,10 @@ Example:
               inputMode === "command"
                 ? "Type command name..."
                 : inputMode === "mention"
-                  ? "Select mention type..."
-                  : inputMode === "model-input"
-                    ? "Enter model name..."
-                    : "Write a message…"
+                ? "Select mention type..."
+                : inputMode === "model-input"
+                ? "Enter model name..."
+                : "Write a message…"
             }
             value={input}
             onInput={handleInput}
@@ -1011,8 +1130,8 @@ Example:
               isProcessing
                 ? "Warping... (esc to interrupt · 4s · ↑ 0 tokens)"
                 : suggestions.length > 0
-                  ? "↑↓ navigate · tab autocomplete · enter submit"
-                  : "? for shortcuts"
+                ? "↑↓ navigate · tab autocomplete · enter submit"
+                : "? for shortcuts"
             }
             style={{
               fg: COLORS.text.dim,
@@ -1029,8 +1148,8 @@ Example:
         </box>
       </box>
     </box>
-  )
+  );
 }
 
-const renderer = await createCliRenderer()
-createRoot(renderer).render(<App />)
+const renderer = await createCliRenderer();
+createRoot(renderer).render(<App />);
