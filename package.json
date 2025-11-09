@@ -1,0 +1,51 @@
+{
+  "name": "qlaw-cli",
+  "version": "0.1.0",
+  "description": "Interactive terminal UI chat application built with OpenTUI and React. A modern, developer-friendly chat interface for your terminal with commands, mentions, and AI integration.",
+  "module": "src/index.tsx",
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/qredence/qlaw-cli.git"
+  },
+  "bugs": {
+    "url": "https://github.com/qredence/qlaw-cli/issues"
+  },
+  "homepage": "https://github.com/qredence/qlaw-cli#readme",
+  "author": "Qredence",
+  "keywords": [
+    "cli",
+    "tui",
+    "terminal",
+    "chat",
+    "ai",
+    "opentui",
+    "react",
+    "interactive",
+    "openai",
+    "assistant",
+    "chatbot",
+    "command-line",
+    "terminal-ui"
+  ],
+  "scripts": {
+    "dev": "bun run --watch src/index.tsx",
+    "start": "bun run src/index.tsx",
+    "enhanced": "bun run src/enhanced.tsx",
+    "dev:enhanced": "bun run --watch src/enhanced.tsx",
+    "typecheck": "bunx tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.6.0"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "@opentui/core": "^0.1.38",
+    "@opentui/react": "^0.1.38",
+    "react": "^19.1.1"
+  }
+}
