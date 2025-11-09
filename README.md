@@ -139,29 +139,47 @@ Type `@` for contextual references:
 
 ## 🗺️ Roadmap
 
-### v0.2.0 (Planned)
+### Upcoming Release - Focus Areas
 
-- [ ] Plugin system for custom commands
-- [ ] Markdown rendering in messages
-- [ ] Code syntax highlighting
-- [ ] File attachment support
-- [ ] Theme customization
-- [ ] Export to multiple formats
+The next release will focus on the following key areas:
 
-### v0.3.0 (Planned)
+#### 🎯 Enhanced Interactivity
+- [ ] Improved command autocomplete and suggestions
+- [ ] Interactive prompts and confirmations
+- [ ] Enhanced keyboard navigation and shortcuts
+- [ ] Real-time feedback and visual indicators
+
+#### ⚙️ Settings Implementation
+- [ ] Comprehensive settings panel
+- [ ] User preferences persistence
+- [ ] Configurable themes and colors
+- [ ] API configuration management
+- [ ] Custom keybindings
+
+#### 🤖 Agent Framework Integration
+- [ ] Native integration of agent-framework as core framework
+- [ ] Native integration of agentic-fleet as core framework
+- [ ] Seamless agent orchestration and management
+- [ ] Multi-agent conversation support
+- [ ] Agent capability discovery
+
+#### ✨ User Experience Improvements
+- [ ] Streamlined onboarding flow
+- [ ] Enhanced error messages and help system
+- [ ] Performance optimizations
+- [ ] Accessibility enhancements
+- [ ] Improved session management UI
+
+### v0.3.0 (Future)
 
 - [ ] Multi-model support (Claude, Gemini, etc.)
 - [ ] Local LLM integration (Ollama)
 - [ ] Voice input support
 - [ ] Image analysis capabilities
 - [ ] Advanced RAG with vector search
-
-### Future
-
-- [ ] Collaborative sessions
-- [ ] Cloud sync
-- [ ] Mobile companion app
 - [ ] Plugin marketplace
+- [ ] Collaborative sessions
+- [ ] Cloud sync capabilities
 
 ## 🤝 Contributing
 
