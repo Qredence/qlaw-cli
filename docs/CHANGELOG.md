@@ -15,7 +15,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Multi-line input support
 - File attachment support
 - Session management improvements
-- Light theme support
+
+## [0.1.3] - 2025-11-09
+
+### Added
+
+- Fuzzy autocomplete for commands and mentions with rich descriptions
+- Interactive prompts overlay for confirmations and input (used by /clear, /model, /endpoint, /api-key)
+- New commands: /endpoint, /api-key
+- Theme system with light and dark palettes; /theme toggles live
+- Streaming spinner indicator and elapsed seconds in status line during responses
+
+### Changed
+
+- Suggestions now come from a central registry and use fuzzy ranking instead of prefix-only filtering
+- Introduced settings-backed keybindings for suggestion navigation (↑/↓, Tab) with a structured keymap
+
+### Fixed
+
+- Guarded mention autocomplete selection to avoid undefined access in edge cases
+
+### Docs
+
+- Added WARP.md tailored to this repo
+- Added IMPLEMENTATION_PLAN.md for Enhanced Interactivity & Settings
 
 ## [0.1.0] - 2025-11-08
 
@@ -91,6 +114,7 @@ Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for details.
 
 ---
 
-[Unreleased]: https://github.com/qredence/qlaw-cli/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/qredence/qlaw-cli/compare/v0.1.3...HEAD
+[0.1.3]: https://github.com/qredence/qlaw-cli/releases/tag/v0.1.3
 [0.1.0]: https://github.com/qredence/qlaw-cli/releases/tag/v0.1.0
 [0.0.1]: https://github.com/qredence/qlaw-cli/releases/tag/v0.0.1

@@ -1,7 +1,15 @@
 #!/usr/bin/env bun
 import { TextAttributes, createCliRenderer } from "@opentui/core";
 import { createRoot, useKeyboard, useRenderer } from "@opentui/react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { getTheme } from "./themes.ts";
+import { fuzzyMatch } from "./suggest.ts";
+import {
+  BUILT_IN_COMMANDS,
+  getBuiltInCommandNames,
+  getBuiltInDescription,
+  MENTIONS,
+} from "./commands.ts";
 
 interface Message {
   id: string;
@@ -18,13 +26,26 @@ interface Session {
   updatedAt: Date;
 }
 
+type ThemeName = "dark" | "light";
+
+type Action = "nextSuggestion" | "prevSuggestion" | "autocomplete";
+
+interface KeySpec {
+  name: string; // e.g. "up", "down", "tab", "k"
+  ctrl?: boolean;
+  alt?: boolean;
+  shift?: boolean;
+}
+
 interface AppSettings {
   apiKey?: string;
   endpoint?: string;
   model?: string;
-  theme: "dark" | "light";
+  theme: ThemeName;
   showTimestamps: boolean;
   autoScroll: boolean;
+  version: number;
+  keybindings: Record<Action, KeySpec[]>;
 }
 
 interface CustomCommand {
@@ -167,8 +188,6 @@ async function streamResponseFromOpenAI(params: {
             }
           } catch (e: any) {
             // Ignore parse errors for keep-alive/comment lines
-            // But if it's clearly JSON and failed, surface once
-            // console.error("SSE parse error", e)
           }
         } else if (line.trim() === "") {
           // End of event
@@ -195,24 +214,10 @@ const STORAGE_KEY_SETTINGS = "qlaw_settings";
 const STORAGE_KEY_SESSIONS = "qlaw_sessions";
 const STORAGE_KEY_COMMANDS = "qlaw_custom_commands";
 
-// Design tokens - Claude Code style
-const COLORS = {
-  bg: {
-    primary: "#1A1A1A",
-    secondary: "#232323",
-    panel: "#2A2A2A",
-    hover: "#333333",
-  },
-  text: {
-    primary: "#FFFFFF",
-    secondary: "#B8B8B8",
-    tertiary: "#888888",
-    dim: "#666666",
-    accent: "#D4A574", // Warm accent
-  },
-  border: "#3A3A3A",
-  success: "#7AC47A",
-  error: "#E57373",
+const defaultKeybindings: Record<Action, KeySpec[]> = {
+  nextSuggestion: [{ name: "down" }],
+  prevSuggestion: [{ name: "up" }],
+  autocomplete: [{ name: "tab" }],
 };
 
 // Helper functions for localStorage
@@ -220,7 +225,13 @@ function loadSettings(): AppSettings {
   try {
     const stored = localStorage.getItem(STORAGE_KEY_SETTINGS);
     if (stored) {
-      return { ...defaultSettings, ...JSON.parse(stored) };
+      const parsed = JSON.parse(stored);
+      return {
+        ...defaultSettings,
+        ...parsed,
+        keybindings: parsed.keybindings || defaultKeybindings,
+        version: 1,
+      };
     }
   } catch (e) {
     console.error("Failed to load settings:", e);
@@ -288,15 +299,39 @@ const defaultSettings: AppSettings = {
   model: OPENAI_MODEL,
   endpoint: OPENAI_BASE_URL,
   apiKey: OPENAI_API_KEY,
+  version: 1,
+  keybindings: defaultKeybindings,
 };
+
+// Spinner frames for streaming indicator
+const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+
+type Prompt =
+  | {
+      type: "confirm";
+      message: string;
+      onConfirm: () => void;
+      onCancel?: () => void;
+    }
+  | {
+      type: "input";
+      message: string;
+      defaultValue?: string;
+      placeholder?: string;
+      onConfirm: (value: string) => void;
+      onCancel?: () => void;
+    };
 
 function App() {
   const renderer = useRenderer();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
+  const [requestStartAt, setRequestStartAt] = useState<number | null>(null);
+  const [spinnerIndex, setSpinnerIndex] = useState(0);
   const [inputMode, setInputMode] = useState<InputMode>("chat");
-  const [suggestions, setSuggestions] = useState<string[]>([]);
+  type UISuggestion = { label: string; description?: string; kind: "command" | "custom-command" | "mention" };
+  const [suggestions, setSuggestions] = useState<UISuggestion[]>([]);
   const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(0);
   const [settings, setSettings] = useState<AppSettings>(() => loadSettings());
   const [sessions, setSessions] = useState<Session[]>(() => loadSessions());
@@ -306,7 +341,24 @@ function App() {
   );
   const [showSessionList, setShowSessionList] = useState(false);
   const [showSettingsMenu, setShowSettingsMenu] = useState(false);
+  const [prompt, setPrompt] = useState<Prompt | null>(null);
   const scrollBoxRef = useRef<any>(null);
+
+  const COLORS = useMemo(() => getTheme(settings.theme), [settings.theme]);
+
+  const matchKey = useCallback((key: any, spec: KeySpec) => {
+    return (
+      key.name === spec.name &&
+      (!!key.ctrl === !!spec.ctrl) &&
+      (!!key.alt === !!spec.alt) &&
+      (!!key.shift === !!spec.shift)
+    );
+  }, []);
+
+  const keyFor = useCallback(
+    (action: Action): KeySpec[] => settings.keybindings[action] || [],
+    [settings.keybindings]
+  );
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -314,6 +366,15 @@ function App() {
       scrollBoxRef.current.scrollToBottom?.();
     }
   }, [messages, settings.autoScroll]);
+
+  // Streaming spinner
+  useEffect(() => {
+    let t: any;
+    if (isProcessing) {
+      t = setInterval(() => setSpinnerIndex((i) => (i + 1) % SPINNER_FRAMES.length), 80);
+    }
+    return () => t && clearInterval(t);
+  }, [isProcessing]);
 
   // Save settings when changed
   useEffect(() => {
@@ -343,34 +404,31 @@ function App() {
     }
   }, [messages, currentSessionId]);
 
-  // Command detection
+  // Command / mention detection + fuzzy suggestions
   useEffect(() => {
     if (input.startsWith("/")) {
       setInputMode("command");
-      const query = input.slice(1).toLowerCase();
-      const builtInCommands = [
-        "clear",
-        "help",
-        "model",
-        "settings",
-        "sessions",
-        "status",
-        "terminal-setup",
-        "commands",
-        "export",
-        "theme",
+      const query = input.slice(1);
+      const customKeys = new Set(customCommands.map((c) => c.name));
+      const items = [
+        ...BUILT_IN_COMMANDS.map((c) => ({ key: c.name, description: c.description, keywords: c.keywords })),
+        ...customCommands.map((c) => ({ key: c.name, description: c.description })),
       ];
-      const customCommandNames = customCommands.map((c) => c.name);
-      const allCommands = [...builtInCommands, ...customCommandNames];
-      const filtered = allCommands.filter((cmd) => cmd.startsWith(query));
-      setSuggestions(filtered);
-      setSelectedSuggestionIndex(0); // Reset selection when suggestions change
+      const matches = fuzzyMatch(query, items, 8);
+      const mapped: UISuggestion[] = matches.map((m) => ({
+        label: m.key,
+        description: m.description || (customKeys.has(m.key) ? "Custom command" : getBuiltInDescription(m.key) || ""),
+        kind: customKeys.has(m.key) ? "custom-command" : "command",
+      }));
+      setSuggestions(mapped);
+      setSelectedSuggestionIndex(0);
     } else if (input.startsWith("@")) {
       setInputMode("mention");
-      const query = input.slice(1).toLowerCase();
-      const availableMentions = ["context", "file", "code", "docs"];
-      const filtered = availableMentions.filter((m) => m.startsWith(query));
-      setSuggestions(filtered);
+      const query = input.slice(1);
+      const items = MENTIONS.map((m) => ({ key: m.name, description: m.description }));
+      const matches = fuzzyMatch(query, items, 8);
+      const mapped: UISuggestion[] = matches.map((m) => ({ label: m.key, description: m.description, kind: "mention" }));
+      setSuggestions(mapped);
       setSelectedSuggestionIndex(0);
     } else {
       setInputMode("chat");
@@ -380,29 +438,47 @@ function App() {
   }, [input, customCommands]);
 
   useKeyboard((key) => {
-    // Handle arrow keys for suggestion navigation
-    if (suggestions.length > 0 && (key.name === "up" || key.name === "down")) {
-      if (key.name === "up") {
-        setSelectedSuggestionIndex((prev) =>
-          prev > 0 ? prev - 1 : suggestions.length - 1
-        );
-      } else if (key.name === "down") {
-        setSelectedSuggestionIndex((prev) =>
-          prev < suggestions.length - 1 ? prev + 1 : 0
-        );
+    // If a prompt is open, handle Esc and let overlay input handle Submit
+    if (prompt) {
+      if (key.name === "escape") {
+        prompt.onCancel?.();
+        setPrompt(null);
+        return;
       }
-      return;
+      return; // ignore other keys (overlay input will capture enter)
     }
 
-    // Tab to autocomplete selected suggestion
-    if (suggestions.length > 0 && key.name === "tab") {
-      const selected = suggestions[selectedSuggestionIndex];
-      if (inputMode === "command") {
-        setInput(`/${selected}`);
-      } else if (inputMode === "mention") {
-        setInput(`@${selected}`);
+    // Settings overlay navigation
+    if (showSettingsMenu) {
+      if (key.name === "escape") {
+        setShowSettingsMenu(false);
+        return;
       }
-      return;
+      // Let settings overlay itself handle Up/Down via focused internal input if needed
+      // Fall through to other handlers only if not handled
+    }
+
+    // Suggestions navigation via keybindings
+    if (suggestions.length > 0) {
+      const nextSpecs = keyFor("nextSuggestion");
+      const prevSpecs = keyFor("prevSuggestion");
+      const autoSpecs = keyFor("autocomplete");
+
+      if (nextSpecs.some((s) => matchKey(key, s))) {
+        setSelectedSuggestionIndex((prev) => (prev < suggestions.length - 1 ? prev + 1 : 0));
+        return;
+      }
+      if (prevSpecs.some((s) => matchKey(key, s))) {
+        setSelectedSuggestionIndex((prev) => (prev > 0 ? prev - 1 : suggestions.length - 1));
+        return;
+      }
+      if (autoSpecs.some((s) => matchKey(key, s))) {
+        const sel = suggestions[selectedSuggestionIndex];
+        if (!sel) return;
+        if (inputMode === "command") setInput(`/${sel.label}`);
+        else if (inputMode === "mention") setInput(`@${sel.label}`);
+        return;
+      }
     }
 
     // Close overlays with Escape
@@ -423,11 +499,13 @@ function App() {
     if (key.ctrl && key.name === "k") {
       renderer?.toggleDebugOverlay();
       renderer?.console.toggle();
+      return;
     }
 
     // Exit with Ctrl+C
     if (key.ctrl && key.name === "c") {
       renderer?.stop();
+      return;
     }
   });
 
@@ -446,15 +524,28 @@ function App() {
       };
 
       switch (cmd) {
-        case "clear":
-          setMessages([]);
+        case "clear": {
+          if (messages.length > 0) {
+            setPrompt({
+              type: "confirm",
+              message: "Clear all messages?",
+              onConfirm: () => {
+                setMessages([]);
+                setPrompt(null);
+              },
+              onCancel: () => setPrompt(null),
+            });
+          }
           return;
+        }
 
         case "help":
           systemMsg.content = `Available commands:
 /clear              Clear all messages
 /help               Show this help
 /model              Set the model name
+/endpoint           Set the API endpoint base URL
+/api-key            Set the API key
 /settings           Configure application settings
 /sessions           List and select previous sessions
 /status             Show current status and configuration
@@ -470,16 +561,77 @@ Mentions:
 @docs - Documentation`;
           break;
 
-        case "model":
-          if (args?.trim()) {
-            setSettings((prev) => ({ ...prev, model: args.trim() }));
-            systemMsg.content = `Model set to: ${args.trim()}`;
+        case "model": {
+          const val = args?.trim();
+          if (val) {
+            setSettings((prev) => ({ ...prev, model: val }));
+            systemMsg.content = `Model set to: ${val}`;
           } else {
-            setInputMode("model-input");
-            systemMsg.content =
-              "Enter model name (e.g., gpt-4, claude-3-opus-20240229):";
+            setPrompt({
+              type: "input",
+              message: "Enter model name:",
+              defaultValue: settings.model || "",
+              onConfirm: (v) => {
+                setSettings((prev) => ({ ...prev, model: v.trim() }));
+                setPrompt(null);
+                setMessages((prev) => [
+                  ...prev,
+                  { id: Date.now().toString(), role: "system", content: `Model set to: ${v.trim()}`, timestamp: new Date() },
+                ]);
+              },
+              onCancel: () => setPrompt(null),
+            });
           }
           break;
+        }
+
+        case "endpoint": {
+          const val = args?.trim();
+          if (val) {
+            setSettings((prev) => ({ ...prev, endpoint: val }));
+            systemMsg.content = `Endpoint set to: ${val}`;
+          } else {
+            setPrompt({
+              type: "input",
+              message: "Enter API endpoint base URL:",
+              defaultValue: settings.endpoint || "",
+              onConfirm: (v) => {
+                setSettings((prev) => ({ ...prev, endpoint: v.trim() }));
+                setPrompt(null);
+                setMessages((prev) => [
+                  ...prev,
+                  { id: Date.now().toString(), role: "system", content: `Endpoint set to: ${v.trim()}` , timestamp: new Date() },
+                ]);
+              },
+              onCancel: () => setPrompt(null),
+            });
+          }
+          break;
+        }
+
+        case "api-key": {
+          const val = args?.trim();
+          if (val) {
+            setSettings((prev) => ({ ...prev, apiKey: val }));
+            systemMsg.content = `API key updated.`;
+          } else {
+            setPrompt({
+              type: "input",
+              message: "Enter API key:",
+              defaultValue: settings.apiKey || "",
+              onConfirm: (v) => {
+                setSettings((prev) => ({ ...prev, apiKey: v.trim() }));
+                setPrompt(null);
+                setMessages((prev) => [
+                  ...prev,
+                  { id: Date.now().toString(), role: "system", content: `API key updated.` , timestamp: new Date() },
+                ]);
+              },
+              onCancel: () => setPrompt(null),
+            });
+          }
+          break;
+        }
 
         case "settings":
           setShowSettingsMenu(true);
@@ -552,13 +704,14 @@ Example:
           }
           break;
 
-        case "theme":
-          const newTheme = settings.theme === "dark" ? "light" : "dark";
+        case "theme": {
+          const newTheme: ThemeName = settings.theme === "dark" ? "light" : "dark";
           setSettings((prev) => ({ ...prev, theme: newTheme }));
           systemMsg.content = `Theme changed to: ${newTheme}`;
           break;
+        }
 
-        case "export":
+        case "export": {
           const exportData = {
             session: {
               id: currentSessionId || "current",
@@ -567,14 +720,11 @@ Example:
             messages,
             settings,
           };
-          systemMsg.content = `Chat export:\n${JSON.stringify(
-            exportData,
-            null,
-            2
-          )}`;
+          systemMsg.content = `Chat export:\n${JSON.stringify(exportData, null, 2)}`;
           break;
+        }
 
-        default:
+        default: {
           // Check custom commands
           const customCmd = customCommands.find((c) => c.name === cmd);
           if (customCmd) {
@@ -582,6 +732,7 @@ Example:
           } else {
             systemMsg.content = `Unknown command: /${cmd}\nType /help for available commands`;
           }
+        }
       }
 
       setMessages((prev) => [...prev, systemMsg]);
@@ -600,14 +751,14 @@ Example:
       const selected = suggestions[selectedSuggestionIndex];
       if (inputMode === "command" && selected) {
         // Execute the command immediately
-        executeCommand(selected, "");
+        executeCommand(selected.label, "");
         setInput("");
         setSuggestions([]);
         setInputMode("chat");
         return;
-      } else if (inputMode === "mention") {
+      } else if (inputMode === "mention" && selected) {
         // For mentions, just complete the input
-        setInput(`@${selected} `);
+        setInput(`@${selected.label} `);
         setSuggestions([]);
         return;
       }
@@ -615,22 +766,7 @@ Example:
 
     if (!input.trim()) return;
 
-    // Handle model input mode
-    if (inputMode === "model-input") {
-      setSettings((prev) => ({ ...prev, model: input.trim() }));
-      const systemMsg: Message = {
-        id: Date.now().toString(),
-        role: "system",
-        content: `Model set to: ${input.trim()}`,
-        timestamp: new Date(),
-      };
-      setMessages((prev) => [...prev, systemMsg]);
-      setInput("");
-      setInputMode("chat");
-      return;
-    }
-
-    // Handle commands
+    // Handle commands entered manually
     if (input.startsWith("/")) {
       const parts = input.slice(1).split(" ");
       const cmd = parts[0];
@@ -662,6 +798,7 @@ Example:
     setMessages((prev) => [...prev, userMessage, assistantPlaceholder]);
     setInput("");
     setIsProcessing(true);
+    setRequestStartAt(Date.now());
 
     // Build history for this turn (use current state + new user)
     const historyForApi = [...messages, userMessage];
@@ -671,19 +808,13 @@ Example:
       history: historyForApi,
       onDelta: (chunk) => {
         setMessages((prev) =>
-          prev.map((m) =>
-            m.id === assistantMessageId
-              ? { ...m, content: m.content + chunk }
-              : m
-          )
+          prev.map((m) => (m.id === assistantMessageId ? { ...m, content: m.content + chunk } : m))
         );
       },
       onError: (err) => {
         setMessages((prev) =>
           prev.map((m) =>
-            m.id === assistantMessageId
-              ? { ...m, content: m.content + `\n\n[Error] ${err.message}` }
-              : m
+            m.id === assistantMessageId ? { ...m, content: m.content + `\n\n[Error] ${err.message}` } : m
           )
         );
       },
@@ -691,25 +822,18 @@ Example:
         setIsProcessing(false);
       },
     });
-  }, [
-    input,
-    isProcessing,
-    inputMode,
-    executeCommand,
-    messages,
-    suggestions,
-    selectedSuggestionIndex,
-  ]);
+  }, [input, isProcessing, inputMode, executeCommand, messages, suggestions, selectedSuggestionIndex]);
 
   // Show welcome screen if no messages
   const showWelcome = messages.length === 0;
 
+  const elapsedSec = useMemo(() => {
+    if (!requestStartAt || !isProcessing) return 0;
+    return Math.max(0, Math.floor((Date.now() - requestStartAt) / 1000));
+  }, [requestStartAt, isProcessing]);
+
   return (
-    <box
-      flexDirection="column"
-      flexGrow={1}
-      style={{ backgroundColor: COLORS.bg.primary }}
-    >
+    <box flexDirection="column" flexGrow={1} style={{ backgroundColor: COLORS.bg.primary }}>
       {/* Header */}
       <box
         style={{
@@ -721,20 +845,8 @@ Example:
           alignItems: "center",
         }}
       >
-        <text
-          content="QLAW CLI"
-          style={{
-            fg: COLORS.text.secondary,
-            attributes: TextAttributes.DIM,
-          }}
-        />
-        <text
-          content=""
-          style={{
-            fg: COLORS.text.dim,
-            attributes: TextAttributes.DIM,
-          }}
-        />
+        <text content="QLAW CLI" style={{ fg: COLORS.text.secondary, attributes: TextAttributes.DIM }} />
+        <text content="" style={{ fg: COLORS.text.dim, attributes: TextAttributes.DIM }} />
       </box>
 
       {/* Main Content Area */}
@@ -764,32 +876,17 @@ Example:
                   marginRight: 2,
                 }}
               >
-                {/* Simple title */}
                 <text
                   content="QLAW CLI"
-                  style={{
-                    fg: COLORS.text.primary,
-                    attributes: TextAttributes.BOLD,
-                    marginBottom: 1,
-                  }}
+                  style={{ fg: COLORS.text.primary, attributes: TextAttributes.BOLD, marginBottom: 1 }}
                 />
-
                 <text
-                  content={`${process
-                    .cwd()
-                    .replace(process.env.HOME || "", "~")}`}
-                  style={{
-                    fg: COLORS.text.dim,
-                    attributes: TextAttributes.DIM,
-                    marginBottom: 1,
-                  }}
+                  content={`${process.cwd().replace(process.env.HOME || "", "~")}`}
+                  style={{ fg: COLORS.text.dim, attributes: TextAttributes.DIM, marginBottom: 1 }}
                 />
                 <text
                   content="SessionStart:Callback hook succeeded: Success"
-                  style={{
-                    fg: COLORS.text.tertiary,
-                    attributes: TextAttributes.DIM,
-                  }}
+                  style={{ fg: COLORS.text.tertiary, attributes: TextAttributes.DIM }}
                 />
               </box>
 
@@ -806,11 +903,7 @@ Example:
               >
                 <text
                   content="Tips for getting started"
-                  style={{
-                    fg: COLORS.text.accent,
-                    attributes: TextAttributes.BOLD,
-                    marginBottom: 1,
-                  }}
+                  style={{ fg: COLORS.text.accent, attributes: TextAttributes.BOLD, marginBottom: 1 }}
                 />
                 <text
                   content="Run /help to see commands. Type @ to reference context. Use ESC to exit."
@@ -824,45 +917,28 @@ Example:
             {messages.map((message, index) => (
               <box
                 key={message.id}
-                style={{
-                  marginBottom: index < messages.length - 1 ? 3 : 0,
-                  flexDirection: "column",
-                }}
+                style={{ marginBottom: index < messages.length - 1 ? 3 : 0, flexDirection: "column" }}
               >
                 {/* Message Header with Icon */}
                 <box style={{ marginBottom: 1 }}>
-                  <text
-                    content="> "
-                    style={{
-                      fg: COLORS.text.secondary,
-                    }}
-                  />
+                  <text content="> " style={{ fg: COLORS.text.secondary }} />
                   <text
                     content={
                       message.role === "user"
                         ? message.content.substring(0, 80)
                         : message.role === "system"
                         ? "System"
-                        : "Assistant"
+                        : `Assistant${isProcessing && index === messages.length - 1 ? " " + SPINNER_FRAMES[spinnerIndex] : ""}`
                     }
-                    style={{
-                      fg: COLORS.text.primary,
-                    }}
+                    style={{ fg: COLORS.text.primary }}
                   />
                 </box>
 
                 {/* Message Content */}
                 <text
-                  content={
-                    message.content ||
-                    (isProcessing && message.role === "assistant" ? "●" : "")
-                  }
-                  style={{
-                    fg: COLORS.text.primary,
-                  }}
+                  content={message.content}
+                  style={{ fg: COLORS.text.primary }}
                 />
-
-                {/* Timestamp - always hidden for cleaner look */}
               </box>
             ))}
           </box>
@@ -886,47 +962,81 @@ Example:
           }}
         >
           <box flexDirection="column" style={{ width: "100%" }}>
-            <text
-              content="Sessions"
-              style={{
-                fg: COLORS.text.accent,
-                attributes: TextAttributes.BOLD,
-                marginBottom: 1,
-              }}
-            />
+            <text content="Sessions" style={{ fg: COLORS.text.accent, attributes: TextAttributes.BOLD, marginBottom: 1 }} />
             {sessions.length === 0 ? (
-              <text
-                content="No saved sessions"
-                style={{ fg: COLORS.text.tertiary }}
-              />
+              <text content="No saved sessions" style={{ fg: COLORS.text.tertiary }} />
             ) : (
-              sessions
-                .slice(-5)
-                .map((session, idx) => (
-                  <text
-                    key={session.id}
-                    content={`${idx + 1}. ${session.name} (${
-                      session.messages.length
-                    } msgs, ${new Date(
-                      session.updatedAt
-                    ).toLocaleDateString()})`}
-                    style={{ fg: COLORS.text.secondary, marginTop: 1 }}
-                  />
-                ))
+              sessions.slice(-5).map((session, idx) => (
+                <text
+                  key={session.id}
+                  content={`${idx + 1}. ${session.name} (${session.messages.length} msgs, ${new Date(session.updatedAt).toLocaleDateString()})`}
+                  style={{ fg: COLORS.text.secondary, marginTop: 1 }}
+                />
+              ))
             )}
-            <text
-              content="\nPress ESC to close"
-              style={{
-                fg: COLORS.text.dim,
-                attributes: TextAttributes.DIM,
-                marginTop: 1,
-              }}
-            />
+            <text content="\nPress ESC to close" style={{ fg: COLORS.text.dim, attributes: TextAttributes.DIM, marginTop: 1 }} />
           </box>
         </box>
       )}
 
-      {/* Settings Menu Overlay */}
+      {/* Prompt Overlay */}
+      {prompt && (
+        <box
+          style={{
+            position: "absolute",
+            top: 7,
+            left: 12,
+            right: 12,
+            backgroundColor: COLORS.bg.panel,
+            border: true,
+            borderColor: COLORS.border,
+            padding: 2,
+            zIndex: 200,
+          }}
+        >
+          <box flexDirection="column" style={{ width: "100%" }}>
+            <text content={prompt.message} style={{ fg: COLORS.text.secondary, marginBottom: 1 }} />
+            {prompt.type === "input" ? (
+              <box
+                style={{
+                  border: true,
+                  borderColor: COLORS.border,
+                  backgroundColor: COLORS.bg.primary,
+                  paddingLeft: 1,
+                  paddingRight: 1,
+                  paddingTop: 1,
+                  paddingBottom: 1,
+                  marginTop: 1,
+                }}
+              >
+                <input
+                  placeholder={prompt.placeholder || "Type and press Enter"}
+                  value={prompt.defaultValue || ""}
+                  onInput={(v: string) => (prompt.defaultValue = v)}
+                  onSubmit={() => {
+                    prompt.onConfirm(prompt.defaultValue || "");
+                  }}
+                  focused={true}
+                  style={{ flexGrow: 1, backgroundColor: COLORS.bg.primary, focusedBackgroundColor: COLORS.bg.primary }}
+                />
+              </box>
+            ) : (
+              <box style={{ marginTop: 1 }}>
+                <input
+                  placeholder="Press Enter to confirm · Esc to cancel"
+                  value=""
+                  onInput={() => {}}
+                  onSubmit={() => prompt.onConfirm()}
+                  focused={true}
+                  style={{ flexGrow: 1, backgroundColor: COLORS.bg.primary, focusedBackgroundColor: COLORS.bg.primary }}
+                />
+              </box>
+            )}
+          </box>
+        </box>
+      )}
+
+      {/* Settings Menu Overlay (read-only summary for now) */}
       {showSettingsMenu && (
         <box
           style={{
@@ -943,52 +1053,14 @@ Example:
           }}
         >
           <box flexDirection="column" style={{ width: "100%" }}>
-            <text
-              content="Settings"
-              style={{
-                fg: COLORS.text.accent,
-                attributes: TextAttributes.BOLD,
-                marginBottom: 1,
-              }}
-            />
-            <text
-              content={`Model: ${settings.model || "Not set"}`}
-              style={{ fg: COLORS.text.secondary, marginTop: 1 }}
-            />
-            <text
-              content={`Endpoint: ${settings.endpoint || "Not set"}`}
-              style={{ fg: COLORS.text.secondary, marginTop: 1 }}
-            />
-            <text
-              content={`API Key: ${
-                settings.apiKey ? "***" + settings.apiKey.slice(-4) : "Not set"
-              }`}
-              style={{ fg: COLORS.text.secondary, marginTop: 1 }}
-            />
-            <text
-              content={`Theme: ${settings.theme}`}
-              style={{ fg: COLORS.text.secondary, marginTop: 1 }}
-            />
-            <text
-              content={`Timestamps: ${
-                settings.showTimestamps ? "Shown" : "Hidden"
-              }`}
-              style={{ fg: COLORS.text.secondary, marginTop: 1 }}
-            />
-            <text
-              content={`Auto-scroll: ${
-                settings.autoScroll ? "Enabled" : "Disabled"
-              }`}
-              style={{ fg: COLORS.text.secondary, marginTop: 1 }}
-            />
-            <text
-              content="\nUse /model, /theme, /status to change settings\nPress ESC to close"
-              style={{
-                fg: COLORS.text.dim,
-                attributes: TextAttributes.DIM,
-                marginTop: 2,
-              }}
-            />
+            <text content="Settings" style={{ fg: COLORS.text.accent, attributes: TextAttributes.BOLD, marginBottom: 1 }} />
+            <text content={`Model: ${settings.model || "Not set"}`} style={{ fg: COLORS.text.secondary, marginTop: 1 }} />
+            <text content={`Endpoint: ${settings.endpoint || "Not set"}`} style={{ fg: COLORS.text.secondary, marginTop: 1 }} />
+            <text content={`API Key: ${settings.apiKey ? "***" + settings.apiKey.slice(-4) : "Not set"}`} style={{ fg: COLORS.text.secondary, marginTop: 1 }} />
+            <text content={`Theme: ${settings.theme}`} style={{ fg: COLORS.text.secondary, marginTop: 1 }} />
+            <text content={`Timestamps: ${settings.showTimestamps ? "Shown" : "Hidden"}`} style={{ fg: COLORS.text.secondary, marginTop: 1 }} />
+            <text content={`Auto-scroll: ${settings.autoScroll ? "Enabled" : "Disabled"}`} style={{ fg: COLORS.text.secondary, marginTop: 1 }} />
+            <text content="\nUse /model, /endpoint, /api-key, /theme, /status to change settings\nPress ESC to close" style={{ fg: COLORS.text.dim, attributes: TextAttributes.DIM, marginTop: 2 }} />
           </box>
         </box>
       )}
@@ -1021,71 +1093,37 @@ Example:
               flexDirection: "column",
             }}
           >
-            {suggestions.map((suggestion, index) => {
+            {suggestions.map((s, index) => {
               const isSelected = index === selectedSuggestionIndex;
               const prefix = inputMode === "command" ? "/" : "@";
-
-              // Get description based on command
-              let description = "";
-              if (inputMode === "command") {
-                const descriptions: Record<string, string> = {
-                  clear: "Clear all messages",
-                  help: "Show this help",
-                  model: "Set the model name",
-                  settings: "Configure application settings",
-                  sessions: "List and select previous sessions",
-                  status: "Show current status and configuration",
-                  "terminal-setup": "Configure terminal keybindings",
-                  commands: "Manage custom commands",
-                  export: "Export chat",
-                  theme: "Toggle theme",
-                };
-                description = descriptions[suggestion] || "Custom command";
-              } else {
-                const descriptions: Record<string, string> = {
-                  context: "Add context",
-                  file: "Reference file",
-                  code: "Code snippet",
-                  docs: "Documentation",
-                };
-                description = descriptions[suggestion] || "";
-              }
-
               return (
                 <box
-                  key={suggestion}
+                  key={`${s.kind}:${s.label}`}
                   style={{
                     paddingLeft: 1,
                     paddingRight: 1,
-                    backgroundColor: isSelected
-                      ? COLORS.bg.hover
-                      : "transparent",
+                    backgroundColor: isSelected ? COLORS.bg.hover : "transparent",
                     marginTop: index > 0 ? 1 : 0,
                   }}
                 >
                   <text
-                    content={`${prefix}${suggestion}`}
+                    content={`${prefix}${s.label}`}
                     style={{
-                      fg: isSelected
-                        ? COLORS.text.accent
-                        : COLORS.text.secondary,
+                      fg: isSelected ? COLORS.text.accent : COLORS.text.secondary,
                       attributes: isSelected ? TextAttributes.BOLD : 0,
-                      width: 20,
+                      width: 24,
                     }}
                   />
                   <text
-                    content={description}
-                    style={{
-                      fg: COLORS.text.tertiary,
-                      attributes: TextAttributes.DIM,
-                      marginLeft: 2,
-                    }}
+                    content={s.description || ""}
+                    style={{ fg: COLORS.text.tertiary, attributes: TextAttributes.DIM, marginLeft: 2 }}
                   />
                 </box>
               );
             })}
           </box>
         )}
+
         {/* Input Field */}
         <box
           style={{
@@ -1114,12 +1152,8 @@ Example:
             value={input}
             onInput={handleInput}
             onSubmit={handleSubmit}
-            focused={!isProcessing && !showSessionList && !showSettingsMenu}
-            style={{
-              flexGrow: 1,
-              backgroundColor: COLORS.bg.panel,
-              focusedBackgroundColor: COLORS.bg.panel,
-            }}
+            focused={!isProcessing && !showSessionList && !showSettingsMenu && !prompt}
+            style={{ flexGrow: 1, backgroundColor: COLORS.bg.panel, focusedBackgroundColor: COLORS.bg.panel }}
           />
         </box>
 
@@ -1128,23 +1162,14 @@ Example:
           <text
             content={
               isProcessing
-                ? "Warping... (esc to interrupt · 4s · ↑ 0 tokens)"
+                ? `Warping... (esc to interrupt · ${elapsedSec}s)`
                 : suggestions.length > 0
                 ? "↑↓ navigate · tab autocomplete · enter submit"
                 : "? for shortcuts"
             }
-            style={{
-              fg: COLORS.text.dim,
-              attributes: TextAttributes.DIM,
-            }}
+            style={{ fg: COLORS.text.dim, attributes: TextAttributes.DIM }}
           />
-          <text
-            content={isProcessing ? "Thinking off (tab to toggle)" : ""}
-            style={{
-              fg: COLORS.text.dim,
-              attributes: TextAttributes.DIM,
-            }}
-          />
+          <text content={isProcessing ? "Streaming..." : ""} style={{ fg: COLORS.text.dim, attributes: TextAttributes.DIM }} />
         </box>
       </box>
     </box>
