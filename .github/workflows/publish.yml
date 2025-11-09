@@ -1,0 +1,106 @@
+name: Publish Package
+
+on:
+    push:
+        branches: [main]
+    workflow_dispatch:
+
+# Separate publish workflow. Ensures CI (typecheck/tests) passes first in ci.yml.
+# Publishes only if the current version has not yet been published to npm.
+# Trusted Publishing (OIDC) active: npm provenance via id-token (no static secret needed).
+# NODE_AUTH_TOKEN removed – relies on GitHub OIDC to mint ephemeral credentials at publish time.
+# See: https://docs.npmjs.com/generating-provenance-statements
+
+permissions:
+    contents: write # needed to create release/tag
+    id-token: write # enable OIDC provenance for npm trusted publishing
+
+jobs:
+    publish:
+        name: Publish to npm & Release
+        runs-on: ubuntu-latest
+        timeout-minutes: 15
+        environment: release # Protect with manual approval for maintainers without direct npm rights
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0
+
+            - name: Setup Bun
+              uses: oven-sh/setup-bun@v2
+              with:
+                  bun-version: latest
+
+            - name: Setup Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: "20"
+                  registry-url: "https://registry.npmjs.org"
+
+            - name: Cache dependencies
+              uses: actions/cache@v4
+              with:
+                  path: |
+                      ~/.bun/install/cache
+                      node_modules
+                  key: ${{ runner.os }}-bun-${{ hashFiles('**/bun.lockb') }}
+                  restore-keys: |
+                      ${{ runner.os }}-bun-
+
+            - name: Install dependencies
+              run: bun install --frozen-lockfile
+
+            - name: Version / publish status check
+              id: version-check
+              run: |
+                  CURRENT_VERSION=$(node -p "require('./package.json').version")
+                  echo "current_version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+                  if npm view qlaw-cli@$CURRENT_VERSION version 2>/dev/null; then
+                    echo "version_exists=true" >> $GITHUB_OUTPUT
+                    echo "ℹ️ Version $CURRENT_VERSION already published on npm"
+                  else
+                    echo "version_exists=false" >> $GITHUB_OUTPUT
+                    echo "✅ Version $CURRENT_VERSION not found on npm; will publish"
+                  fi
+
+            - name: Publish to npm (with provenance)
+              if: steps.version-check.outputs.version_exists == 'false'
+              run: npm publish --provenance
+
+            - name: Create GitHub Release
+              if: steps.version-check.outputs.version_exists == 'false'
+              uses: actions/create-release@v1
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              with:
+                  tag_name: v${{ steps.version-check.outputs.current_version }}
+                  release_name: Release v${{ steps.version-check.outputs.current_version }}
+                  body: |
+                      ## qlaw-cli v${{ steps.version-check.outputs.current_version }}
+
+                      ### Installation
+                      ```bash
+                      npm install -g qlaw-cli@${{ steps.version-check.outputs.current_version }}
+                      ```
+
+                      ### Changes
+                      See [CHANGELOG.md](https://github.com/Qredence/qlaw-cli/blob/main/docs/CHANGELOG.md).
+
+                      ### Documentation
+                      - [Quick Start](https://github.com/Qredence/qlaw-cli/blob/main/docs/QUICKSTART.md)
+                      - [API Integration](https://github.com/Qredence/qlaw-cli/blob/main/docs/API-INTEGRATION.md)
+                      - [Roadmap](https://github.com/Qredence/qlaw-cli/blob/main/docs/ROADMAP.md)
+                  draft: false
+                  prerelease: false
+
+            - name: Summary / links
+              if: steps.version-check.outputs.version_exists == 'false'
+              run: |
+                  echo "🎉 Published qlaw-cli@${{ steps.version-check.outputs.current_version }}"
+                  echo "📦 https://www.npmjs.com/package/qlaw-cli"
+                  echo "🏷️ Release https://github.com/Qredence/qlaw-cli/releases/tag/v${{ steps.version-check.outputs.current_version }}"
+
+            - name: Skip notice
+              if: steps.version-check.outputs.version_exists == 'true'
+              run: echo "⏭️ Publish skipped; version already exists."
