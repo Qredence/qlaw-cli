@@ -7,6 +7,11 @@
   "bin": {
     "qlaw": "./src/index.tsx"
   },
+  "files": [
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -35,7 +40,8 @@
   "scripts": {
     "dev": "bun run --watch src/index.tsx",
     "start": "bun run src/index.tsx",
-    "typecheck": "bunx tsc -p tsconfig.json --noEmit"
+    "typecheck": "bunx tsc -p tsconfig.json --noEmit",
+    "prepublishOnly": "bun run typecheck"
   },
   "devDependencies": {
     "@types/bun": "latest",
