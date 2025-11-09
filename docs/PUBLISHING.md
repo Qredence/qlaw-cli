@@ -48,7 +48,7 @@ Before you can publish the package, you need to configure npm Trusted Publishing
        id-token: write  # Enable OIDC authentication
        contents: write  # Create releases/tags
      ```
-   - The publish command already includes `--provenance` flag
+   - The publish command already includes `--provenance` and `--access public` flags
 
 ## Publishing Process
 
