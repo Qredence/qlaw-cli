@@ -7,8 +7,8 @@ on:
 
 # Separate publish workflow. Ensures CI (typecheck/tests) passes first in ci.yml.
 # Publishes only if the current version has not yet been published to npm.
-# Trusted Publishing (OIDC) active: npm provenance via id-token (no static secret needed).
-# NODE_AUTH_TOKEN removed – relies on GitHub OIDC to mint ephemeral credentials at publish time.
+# Uses NPM_TOKEN secret for authentication (required for first publish and standard publishing).
+# Provenance statements enabled via --provenance flag for supply chain security.
 # See: https://docs.npmjs.com/generating-provenance-statements
 
 permissions:
@@ -66,7 +66,9 @@ jobs:
 
             - name: Publish to npm (with provenance)
               if: steps.version-check.outputs.version_exists == 'false'
-              run: npm publish --provenance
+              env:
+                  NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+              run: npm publish --provenance --access public
 
             - name: Create GitHub Release
               if: steps.version-check.outputs.version_exists == 'false'
