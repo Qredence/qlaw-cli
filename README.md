@@ -6,15 +6,13 @@
 [![Built with Bun](https://img.shields.io/badge/Built%20with-Bun-f472b6.svg)](https://bun.sh)
 [![Code of Conduct](https://img.shields.io/badge/Code%20of-Conduct-blueviolet.svg)](CODE_OF_CONDUCT.md)
 
-An interactive terminal UI chat application built with OpenTUI and React, similar to OpenCode or Claude Code.
+![alt text](docs/assets/thumbnails.jpg)
 
-> **Note**: Add a screenshot or demo GIF here to showcase the application!
-> You can use tools like [Asciinema](https://asciinema.org/) to record terminal sessions.
 
 **👉 New here? Start with the [Quick Start Guide](./QUICKSTART.md)**  |  ✋ Please read our [Code of Conduct](CODE_OF_CONDUCT.md) before contributing.
 
 ## Features
-
+An interactive terminal UI chat application built with OpenTUI and React, similar to OpenCode or Claude Code.
 - 🎨 **Polished monochrome design** - Clean aesthetic with cyan accent
 - 💬 **Interactive chat interface** - Smooth message history with visual hierarchy
 - ✨ **Animated shimmer loader** - Elegant loading indicator
