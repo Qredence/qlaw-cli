@@ -130,8 +130,7 @@ Enhancement suggestions are tracked as GitHub issues. When creating an enhanceme
 ```
 qlaw-cli/
 ├── src/
-│   ├── index.tsx          # Basic chat interface
-│   └── enhanced.tsx       # Enhanced version with command palette
+│   └── index.tsx          # Main application
 ├── examples/
 │   ├── api-integration.tsx # Real API integration examples
 │   └── README.md          # API integration guide
@@ -141,7 +140,9 @@ qlaw-cli/
 ├── docs/
 │   ├── ARCHITECTURE.md    # Technical architecture
 │   ├── DESIGN.md          # Design system
-│   └── QUICKSTART.md      # Quick start guide
+│   ├── QUICKSTART.md      # Quick start guide
+│   ├── UI-REFERENCE.md    # UI visual reference
+│   └── CHANGELOG.md       # Version history
 └── package.json
 ```
 

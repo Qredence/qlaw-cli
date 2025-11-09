@@ -53,6 +53,7 @@
   "dependencies": {
     "@opentui/core": "^0.1.38",
     "@opentui/react": "^0.1.38",
+    "applicationinsights": "^3.12.0",
     "react": "^19.1.1"
   }
 }

@@ -6,85 +6,100 @@
 [![Built with Bun](https://img.shields.io/badge/Built%20with-Bun-f472b6.svg)](https://bun.sh)
 [![Code of Conduct](https://img.shields.io/badge/Code%20of-Conduct-blueviolet.svg)](CODE_OF_CONDUCT.md)
 
-![alt text](docs/assets/thumbnails.jpg)
+![qlaw-cli interface](docs/assets/thumbnails.jpg)
 
+> A modern, feature-rich terminal UI chat application with OpenAI integration, built with OpenTUI and React.
 
-**👉 New here? Start with the [Quick Start Guide](./QUICKSTART.md)**  |  ✋ Please read our [Code of Conduct](CODE_OF_CONDUCT.md) before contributing.
+**👉 New here? Start with the [Quick Start Guide](./docs/QUICKSTART.md)** | ✋ Read our [Code of Conduct](CODE_OF_CONDUCT.md) before contributing
 
-## Features
-An interactive terminal UI chat application built with OpenTUI and React, similar to OpenCode or Claude Code.
-- 🎨 **Polished monochrome design** - Clean aesthetic with cyan accent
-- 💬 **Interactive chat interface** - Smooth message history with visual hierarchy
-- ✨ **Animated shimmer loader** - Elegant loading indicator
-- ⚡ **Command system** - Type `/` for commands (clear, help, settings, export)
-- 🏷️ **Mention system** - Type `@` for mentions (context, file, code, docs)
-- 🎯 **Smart input modes** - Auto-detects commands and shows suggestions
-- 📜 **Auto-scrolling** - Always stays at the latest message
-- ⌨️ **Keyboard shortcuts** - Minimal, intuitive controls
-- 🔧 **Settings** - Toggle timestamps, theme, auto-scroll
-- 📱 **Responsive** - Adapts to any terminal size
+## ✨ Features
 
-## Installation
+### Core Capabilities
+
+- 🤖 **OpenAI/Azure Integration** - Streaming responses with OpenAI and Azure OpenAI support
+- 💬 **Session Management** - Multiple conversations with persistent history
+- ⚡ **Command System** - 10+ built-in commands + custom command support
+- 🏷️ **Smart Mentions** - Context, file, code, and docs references
+- 🎯 **Autocomplete** - Intelligent suggestion system with keyboard navigation
+- 💾 **Settings Persistence** - Preferences saved across sessions
+
+### User Experience
+
+- 🎨 **Claude Code-Inspired Design** - Clean, professional interface with warm accents
+- 📱 **Fully Responsive** - Adapts to any terminal size
+- ⌨️ **Keyboard-Driven** - Efficient workflows without leaving the keyboard
+- 📜 **Smart Scrolling** - Auto-scroll with visual feedback
+- 🔧 **Overlay Menus** - Settings and session list overlays
+
+### Built-in Commands
+
+`/clear`, `/help`, `/settings`, `/export`, `/sessions`, `/new`, `/terminal-setup`, `/version`, `/quit`, and more
+
+## 🚀 Quick Start
+
+### Installation
 
 ```bash
+# Install dependencies
 bun install
+
+# Copy environment template
+cp .env.example .env
+
+# Add your OpenAI API key to .env
+# OPENAI_API_KEY=your-key-here
 ```
 
-## Running
-
-### Basic Version
-
-Simple chat interface with core features:
+### Running
 
 ```bash
+# Start the application
 bun run start
-# or with auto-reload
+
+# Or with auto-reload during development
 bun run dev
 ```
 
-### Enhanced Version
-
-Full-featured version with command palette and advanced features:
+### Global Installation
 
 ```bash
-bun run enhanced
-# or with auto-reload
-bun run dev:enhanced
+# Install globally via npm (once published)
+npm install -g qlaw-cli
+
+# Or link locally for development
+bun link
+
+# Then run from anywhere
+qlaw
 ```
 
-## Version Comparison
+## 📖 Usage
 
-| Feature | Basic | Enhanced |
-|---------|-------|----------|
-| Chat interface | ✅ | ✅ |
-| Message history | ✅ | ✅ |
-| Auto-scrolling | ✅ | ✅ |
-| Keyboard shortcuts | ✅ | ✅ |
-| Command palette | ❌ | ✅ |
-| System messages | ❌ | ✅ |
-| Context-aware responses | ❌ | ✅ |
-| Message counter | ❌ | ✅ |
-| Clear chat command | ❌ | ✅ |
+### Getting Started
 
-## Usage
+1. **Type your message** in the input field
+2. **Press Enter** to send
+3. **AI responds** with streaming support
+4. **Use commands** by typing `/` for quick actions
+5. **Add mentions** by typing `@` for context
 
-### Basic Controls
+### Commands
 
-- Type your message in the input field at the bottom
-- Press **Enter** to send your message
-- The AI will respond after a brief delay
-- Press **Esc** to exit the application
+Type `/` to see available commands:
 
-### Commands & Mentions
-
-**Commands** (type `/` to activate):
-- `/clear` - Clear all messages
+- `/clear` - Clear chat history
 - `/help` - Show help information
-- `/settings` - Toggle timestamps on/off
-- `/export` - Export chat history
-- `/theme` - Toggle theme (coming soon)
+- `/settings` - Open settings menu
+- `/sessions` - View all sessions
+- `/new` - Start new session
+- `/export` - Export chat to JSON
+- `/version` - Show version info
+- `/quit` - Exit application
 
-**Mentions** (type `@` to activate):
+### Mentions
+
+Type `@` for contextual references:
+
 - `@context` - Add contextual information
 - `@file` - Reference a file
 - `@code` - Insert code snippet
@@ -92,17 +107,74 @@ bun run dev:enhanced
 
 ### Keyboard Shortcuts
 
-- `Esc` - Exit application
-- `Ctrl+K` - Toggle debug console
-- `Ctrl+C` - Exit application
+- `↑` `↓` - Navigate suggestions
+- `Tab` - Autocomplete suggestion
+- `Enter` - Send message / Select suggestion
+- `Esc` - Cancel input / Close overlays / Exit
+- `Ctrl+C` - Force exit
 
-## Extending
+## 📚 Documentation
 
-To integrate with a real API:
+- **[Quick Start Guide](./docs/QUICKSTART.md)** - Get up and running in 3 minutes
+- **[Architecture](./docs/ARCHITECTURE.md)** - Technical design and structure
+- **[UI Reference](./docs/UI-REFERENCE.md)** - Visual interface guide
+- **[Design System](./docs/DESIGN.md)** - Colors, typography, and components
+- **[Changelog](./docs/CHANGELOG.md)** - Version history
 
-1. Replace the `setTimeout` mock in `handleSubmit` with an actual API call
-2. Add streaming support for real-time responses
-3. Implement message history persistence
-4. Add support for code blocks, markdown, and rich formatting
+## 🗺️ Roadmap
 
-This project was created using `bun create tui`. [create-tui](https://git.new/create-tui) is the easiest way to get started with OpenTUI.
+### v0.2.0 (Planned)
+
+- [ ] Plugin system for custom commands
+- [ ] Markdown rendering in messages
+- [ ] Code syntax highlighting
+- [ ] File attachment support
+- [ ] Theme customization
+- [ ] Export to multiple formats
+
+### v0.3.0 (Planned)
+
+- [ ] Multi-model support (Claude, Gemini, etc.)
+- [ ] Local LLM integration (Ollama)
+- [ ] Voice input support
+- [ ] Image analysis capabilities
+- [ ] Advanced RAG with vector search
+
+### Future
+
+- [ ] Collaborative sessions
+- [ ] Cloud sync
+- [ ] Mobile companion app
+- [ ] Plugin marketplace
+
+## 🤝 Contributing
+
+We welcome contributions! Please see:
+
+- **[Contributing Guide](./CONTRIBUTING.md)** - How to contribute
+- **[Code of Conduct](./CODE_OF_CONDUCT.md)** - Community standards
+- **[Security Policy](./SECURITY.md)** - Reporting vulnerabilities
+
+## 📄 License
+
+MIT License - see [LICENSE](./LICENSE) file for details.
+
+## 🙏 Acknowledgements
+
+**Inspiration:**
+
+- **[Claude Code](https://claude.ai)** - Design inspiration for the clean, minimal interface and warm accent color scheme
+- **[Cursor](https://cursor.sh)** - Terminal integration patterns and workflow concepts
+
+**Built With:**
+
+- **[OpenTUI](https://opentui.dev)** - The excellent terminal UI framework that powers this application
+- **[React](https://react.dev)** - Component library for building the interface
+- **[Bun](https://bun.sh)** - Fast JavaScript runtime and package manager
+- **[TypeScript](https://typescriptlang.org)** - Type-safe development
+
+Special thanks to the OpenTUI team for creating such a powerful and elegant framework for building terminal UIs.
+
+---
+
+**Made with ❤️ by [Qredence](https://github.com/qredence)**

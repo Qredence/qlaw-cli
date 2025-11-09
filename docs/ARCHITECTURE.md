@@ -9,39 +9,42 @@ This project implements an interactive terminal chat interface similar to OpenCo
 ```
 qlaw-cli/
 ├── src/
-│   ├── index.tsx          # Basic chat interface
-│   └── enhanced.tsx       # Enhanced version with command palette
+│   └── index.tsx          # Main application
+├── examples/
+│   ├── api-integration.tsx
+│   └── README.md
+├── docs/
+│   ├── QUICKSTART.md
+│   ├── UI-REFERENCE.md
+│   ├── ARCHITECTURE.md
+│   ├── DESIGN.md
+│   └── CHANGELOG.md
 ├── package.json
-├── README.md
-└── ARCHITECTURE.md        # This file
+└── README.md
 ```
 
 ## Core Components
 
-### 1. Basic Chat Interface (`index.tsx`)
+### Main Chat Interface (`src/index.tsx`)
 
-The basic implementation includes:
+The application includes:
 
-- **Message History**: Scrollable message display with role-based styling
-- **Input Field**: Text input with submit on Enter
-- **Auto-scrolling**: Automatically scrolls to bottom on new messages
-- **Keyboard Shortcuts**: Global shortcuts for debug and exit
+- **OpenAI/Azure Integration**: Real API integration with streaming support
+- **Session Management**: Multiple conversations with persistent storage
+- **Command System**: 10+ built-in commands with extensibility
+- **Mention System**: Context, file, code, and docs references
+- **Autocomplete**: Intelligent suggestion system with keyboard navigation
+- **Settings Persistence**: Preferences saved via localStorage
+- **Overlay Menus**: Settings and session list interfaces
 
 #### Key Features:
-- Messages array with `user` and `assistant` roles
-- Simulated AI responses with delay
-- Focus management (input disabled while processing)
-- Styled components with OpenTUI primitives
 
-### 2. Enhanced Chat Interface (`enhanced.tsx`)
-
-Extended version with additional features:
-
-- **Command Palette**: Accessible via Ctrl+P
-- **System Messages**: Third message type for notifications
-- **Smart Responses**: Context-aware mock responses
-- **Multiple Commands**: Clear chat, export, help
-- **Enhanced Keyboard Navigation**: Arrow keys for command selection
+- Streaming AI responses with OpenAI API
+- Custom command registration and handling
+- Session switching and history management
+- Smart input modes (normal, command, mention)
+- Keyboard-driven navigation throughout
+- Responsive layout adapting to terminal size
 
 ## Component Architecture
 
@@ -49,43 +52,54 @@ Extended version with additional features:
 
 ```typescript
 interface Message {
-  id: string
-  role: "user" | "assistant" | "system"
-  content: string
-  timestamp: Date
+  id: string;
+  role: "user" | "assistant" | "system";
+  content: string;
+  timestamp: Date;
   metadata?: {
-    type?: "text" | "code" | "error"
-    language?: string
-  }
+    type?: "text" | "code" | "error";
+    language?: string;
+  };
 }
 ```
 
 State hooks:
+
 - `messages`: Array of Message objects
+- `sessions`: Map of session IDs to session data
+- `currentSessionId`: Active session identifier
 - `input`: Current input field value
 - `isProcessing`: Boolean to track AI processing state
-- `showCommandPalette`: Boolean for command palette visibility (enhanced)
-- `selectedCommand`: Number for command selection index (enhanced)
+- `showSettings`: Boolean for settings overlay visibility
+- `showSessions`: Boolean for session list overlay visibility
+- `suggestions`: Array of autocomplete suggestions
+- `selectedSuggestionIndex`: Currently selected suggestion
+- `settings`: User preferences (timestamps, autoScroll, etc.)
 
 ### Layout Structure
 
 ```
 ┌─────────────────────────────────────┐
 │ Header (fixed height: 3)            │
-│ - Title                              │
-│ - Keyboard shortcuts                 │
+│ - Title + Session name               │
+│ - Status indicators                  │
 ├─────────────────────────────────────┤
 │                                      │
 │ Messages Area (flex-grow: 1)        │
-│ - Scrollable                         │
+│ - Scrollable with visual feedback   │
 │ - Auto-scroll to bottom              │
+│ - Role-based styling                 │
 │                                      │
-│ [Command Palette Overlay]            │
+│ [Settings Overlay]                   │
+│ [Sessions List Overlay]              │
 │                                      │
 ├─────────────────────────────────────┤
+│ Suggestions (when active)            │
+│ - Command/mention autocomplete       │
+├─────────────────────────────────────┤
 │ Input Area (fixed height: 4)        │
-│ - Label                              │
-│ - Input field                        │
+│ - Mode indicator                     │
+│ - Input field with placeholder       │
 └─────────────────────────────────────┘
 ```
 
@@ -94,6 +108,7 @@ State hooks:
 ### 1. Message Display
 
 Each message is rendered with:
+
 - Role-based header (color-coded)
 - Message content (with word wrapping)
 - Timestamp (dimmed)
@@ -112,13 +127,13 @@ Each message is rendered with:
 Implemented using `useEffect` and `scrollBoxRef`:
 
 ```tsx
-const scrollBoxRef = useRef<any>(null)
+const scrollBoxRef = useRef<any>(null);
 
 useEffect(() => {
   if (scrollBoxRef.current) {
-    scrollBoxRef.current.scrollToBottom?.()
+    scrollBoxRef.current.scrollToBottom?.();
   }
-}, [messages])
+}, [messages]);
 ```
 
 ### 3. Keyboard Handling
@@ -128,39 +143,40 @@ Global keyboard shortcuts using `useKeyboard` hook:
 ```tsx
 useKeyboard((key) => {
   if (key.ctrl && key.name === "k") {
-    renderer?.toggleDebugOverlay()
+    renderer?.toggleDebugOverlay();
   }
   if (key.name === "escape") {
-    renderer?.stop()
+    renderer?.stop();
   }
-})
+});
 ```
 
 ### 4. Input Handling
 
 Two-step process:
+
 1. `onInput` callback updates state
 2. `onSubmit` callback sends message
 
 ```tsx
 const handleInput = useCallback((value: string) => {
-  setInput(value)
-}, [])
+  setInput(value);
+}, []);
 
 const handleSubmit = useCallback(() => {
-  if (!input.trim() || isProcessing) return
-  
+  if (!input.trim() || isProcessing) return;
+
   // Add user message
-  setMessages(prev => [...prev, userMessage])
-  setInput("")
-  setIsProcessing(true)
-  
+  setMessages((prev) => [...prev, userMessage]);
+  setInput("");
+  setIsProcessing(true);
+
   // Simulate AI response
   setTimeout(() => {
-    setMessages(prev => [...prev, assistantMessage])
-    setIsProcessing(false)
-  }, 1000)
-}, [input, isProcessing])
+    setMessages((prev) => [...prev, assistantMessage]);
+    setIsProcessing(false);
+  }, 1000);
+}, [input, isProcessing]);
 ```
 
 ## Styling System
@@ -189,28 +205,31 @@ Replace the mock response with actual API calls:
 ```typescript
 const handleSubmit = useCallback(async () => {
   // ... add user message ...
-  
+
   try {
-    const response = await fetch('YOUR_API_ENDPOINT', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: input })
-    })
-    
-    const data = await response.json()
-    
-    setMessages(prev => [...prev, {
-      id: Date.now().toString(),
-      role: "assistant",
-      content: data.content,
-      timestamp: new Date()
-    }])
+    const response = await fetch("YOUR_API_ENDPOINT", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: input }),
+    });
+
+    const data = await response.json();
+
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: Date.now().toString(),
+        role: "assistant",
+        content: data.content,
+        timestamp: new Date(),
+      },
+    ]);
   } catch (error) {
     // Handle error
   } finally {
-    setIsProcessing(false)
+    setIsProcessing(false);
   }
-}, [input])
+}, [input]);
 ```
 
 ### 2. Streaming Responses
@@ -223,32 +242,28 @@ const handleSubmit = useCallback(async () => {
     id: Date.now().toString(),
     role: "assistant",
     content: "",
-    timestamp: new Date()
-  }
-  
-  setMessages(prev => [...prev, assistantMessage])
-  
-  const response = await fetch('YOUR_API_ENDPOINT', {
-    method: 'POST',
-    body: JSON.stringify({ message: input })
-  })
-  
-  const reader = response.body?.getReader()
-  const decoder = new TextDecoder()
-  
+    timestamp: new Date(),
+  };
+
+  setMessages((prev) => [...prev, assistantMessage]);
+
+  const response = await fetch("YOUR_API_ENDPOINT", {
+    method: "POST",
+    body: JSON.stringify({ message: input }),
+  });
+
+  const reader = response.body?.getReader();
+  const decoder = new TextDecoder();
+
   while (true) {
-    const { done, value } = await reader.read()
-    if (done) break
-    
-    const chunk = decoder.decode(value)
-    
-    setMessages(prev => prev.map(msg =>
-      msg.id === assistantMessage.id
-        ? { ...msg, content: msg.content + chunk }
-        : msg
-    ))
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    const chunk = decoder.decode(value);
+
+    setMessages((prev) => prev.map((msg) => (msg.id === assistantMessage.id ? { ...msg, content: msg.content + chunk } : msg)));
   }
-}, [input])
+}, [input]);
 ```
 
 ### 3. Message History Persistence
@@ -258,21 +273,22 @@ Store messages in localStorage or a database:
 ```typescript
 // Save messages
 useEffect(() => {
-  localStorage.setItem('chat-history', JSON.stringify(messages))
-}, [messages])
+  localStorage.setItem("chat-history", JSON.stringify(messages));
+}, [messages]);
 
 // Load messages on mount
 useEffect(() => {
-  const saved = localStorage.getItem('chat-history')
+  const saved = localStorage.getItem("chat-history");
   if (saved) {
-    setMessages(JSON.parse(saved))
+    setMessages(JSON.parse(saved));
   }
-}, [])
+}, []);
 ```
 
 ### 4. Rich Content Rendering
 
 Add support for:
+
 - **Code blocks**: Syntax highlighting with tree-sitter
 - **Markdown**: Bold, italic, lists, links
 - **Images**: ASCII art or sixel graphics
@@ -299,18 +315,18 @@ Add support for:
 Recommended testing approach:
 
 ```typescript
-import { createTestRenderer } from "@opentui/core/testing"
+import { createTestRenderer } from "@opentui/core/testing";
 
 describe("ChatInterface", () => {
   it("should render initial message", async () => {
-    const renderer = createTestRenderer()
+    const renderer = createTestRenderer();
     // ... test implementation
-  })
-  
+  });
+
   it("should handle user input", async () => {
     // ... test implementation
-  })
-})
+  });
+});
 ```
 
 ## Resources
