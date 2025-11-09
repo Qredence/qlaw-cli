@@ -1,6 +1,6 @@
 {
   "name": "qlaw-cli",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Interactive terminal UI chat application built with OpenTUI and React. A modern, developer-friendly chat interface for your terminal with commands, mentions, and AI integration.",
   "module": "src/index.tsx",
   "type": "module",
