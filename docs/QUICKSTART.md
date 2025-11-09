@@ -2,26 +2,54 @@
 
 Get your interactive chat TUI running in 3 minutes!
 
-## Prerequisites
+## Installation
+
+### Option 1: Install from npm (Recommended)
+
+```bash
+npm install -g qlaw-cli
+```
+
+Then run from anywhere:
+
+```bash
+qlaw
+```
+
+### Option 2: Development Setup
+
+If you want to contribute or develop locally:
+
+**Prerequisites:**
 
 - [Bun](https://bun.sh) installed (`curl -fsSL https://bun.sh/install | bash`)
 - Terminal with 256-color support
 - macOS, Linux, or Windows with WSL
 
-## Installation
+**Setup:**
 
 ```bash
+# Clone the repository
+git clone https://github.com/qredence/qlaw-cli.git
 cd qlaw-cli
+
+# Install dependencies
 bun install
-```
 
-## Try It Out
+# Copy environment template
+cp .env.example .env
 
-### 1. Start the Application
+# Add your OpenAI API key to .env
+# OPENAI_API_KEY=your-key-here
 
-```bash
+# Run locally
 bun run start
+
+# Or with auto-reload
+bun run dev
 ```
+
+## Using qlaw-cli
 
 **What you'll see:**
 
@@ -41,7 +69,9 @@ bun run start
 - Type `@` to see mention options
 - Press Esc to exit
 
-### 2. Development Mode (Auto-reload)
+## Development Mode
+
+For contributors working locally with auto-reload:
 
 ```bash
 bun run dev

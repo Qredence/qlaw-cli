@@ -1,7 +1,7 @@
 # qlaw-cli
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Version](https://img.shields.io/badge/version-0.1.0-blue.svg)](https://github.com/qredence/qlaw-cli/releases)
+[![Version](https://img.shields.io/badge/version-0.1.1-blue.svg)](https://github.com/qredence/qlaw-cli/releases)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 [![Built with Bun](https://img.shields.io/badge/Built%20with-Bun-f472b6.svg)](https://bun.sh)
 [![Code of Conduct](https://img.shields.io/badge/Code%20of-Conduct-blueviolet.svg)](CODE_OF_CONDUCT.md)
@@ -39,7 +39,40 @@
 
 ### Installation
 
+**Install from npm:**
+
 ```bash
+npm install -g qlaw-cli
+```
+
+**Or using other package managers:**
+
+```bash
+# Using yarn
+yarn global add qlaw-cli
+
+# Using pnpm
+pnpm add -g qlaw-cli
+
+# Using bun
+bun add -g qlaw-cli
+```
+
+Then run from anywhere:
+
+```bash
+qlaw
+```
+
+### Development Setup
+
+If you want to contribute or develop locally:
+
+```bash
+# Clone the repository
+git clone https://github.com/qredence/qlaw-cli.git
+cd qlaw-cli
+
 # Install dependencies
 bun install
 
@@ -48,29 +81,12 @@ cp .env.example .env
 
 # Add your OpenAI API key to .env
 # OPENAI_API_KEY=your-key-here
-```
 
-### Running
-
-```bash
-# Start the application
+# Run locally
 bun run start
 
 # Or with auto-reload during development
 bun run dev
-```
-
-### Global Installation
-
-```bash
-# Install globally via npm (once published)
-npm install -g qlaw-cli
-
-# Or link locally for development
-bun link
-
-# Then run from anywhere
-qlaw
 ```
 
 ## 📖 Usage
