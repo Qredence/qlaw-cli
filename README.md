@@ -20,7 +20,8 @@
 - 💬 **Session Management** - Multiple conversations with persistent history
 - ⚡ **Command System** - 10+ built-in commands + custom command support
 - 🏷️ **Smart Mentions** - Context, file, code, and docs references
-- 🎯 **Autocomplete** - Intelligent suggestion system with keyboard navigation
+- 🎯 **Autocomplete** - Fuzzy suggestions with keyboard navigation
+- 🎨 **Themes** - Light/Dark toggle
 - 💾 **Settings Persistence** - Preferences saved across sessions
 
 ### User Experience
@@ -33,7 +34,7 @@
 
 ### Built-in Commands
 
-`/clear`, `/help`, `/settings`, `/export`, `/sessions`, `/new`, `/terminal-setup`, `/version`, `/quit`, and more
+`/clear`, `/help`, `/model`, `/endpoint`, `/api-key`, `/status`, `/settings`, `/sessions`, `/commands`, `/export`, `/theme`, `/terminal-setup`, and more
 
 ## 🚀 Quick Start
 
@@ -103,14 +104,18 @@ bun run dev
 
 Type `/` to see available commands:
 
-- `/clear` - Clear chat history
+- `/clear` - Clear chat history (with confirmation)
 - `/help` - Show help information
+- `/model` - Set the model name
+- `/endpoint` - Set the API endpoint base URL
+- `/api-key` - Set the API key (masked in status)
+- `/status` - Show current configuration
 - `/settings` - Open settings menu
-- `/sessions` - View all sessions
-- `/new` - Start new session
-- `/export` - Export chat to JSON
-- `/version` - Show version info
-- `/quit` - Exit application
+- `/sessions` - View recent sessions
+- `/commands` - List custom commands
+- `/export` - Export current chat to JSON
+- `/theme` - Toggle light/dark theme
+- `/terminal-setup` - Terminal keybinding tips
 
 ### Mentions
 
@@ -144,16 +149,16 @@ Type `@` for contextual references:
 The next release will focus on the following key areas:
 
 #### 🎯 Enhanced Interactivity
-- [ ] Improved command autocomplete and suggestions
-- [ ] Interactive prompts and confirmations
-- [ ] Enhanced keyboard navigation and shortcuts
-- [ ] Real-time feedback and visual indicators
+- [x] Improved command autocomplete and suggestions
+- [x] Interactive prompts and confirmations
+- [x] Enhanced keyboard navigation and shortcuts
+- [x] Real-time feedback and visual indicators
 
 #### ⚙️ Settings Implementation
 - [ ] Comprehensive settings panel
-- [ ] User preferences persistence
-- [ ] Configurable themes and colors
-- [ ] API configuration management
+- [x] User preferences persistence
+- [x] Configurable themes and colors
+- [x] API configuration management
 - [ ] Custom keybindings
 
 #### 🤖 Agent Framework Integration
