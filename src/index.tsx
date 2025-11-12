@@ -10,85 +10,56 @@ import {
   getBuiltInDescription,
   MENTIONS,
 } from "./commands.ts";
-
-interface Message {
-  id: string;
-  role: "user" | "assistant" | "system";
-  content: string;
-  timestamp: Date;
-}
-
-interface Session {
-  id: string;
-  name: string;
-  messages: Message[];
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-type ThemeName = "dark" | "light";
-
-type Action = "nextSuggestion" | "prevSuggestion" | "autocomplete";
-
-interface KeySpec {
-  name: string; // e.g. "up", "down", "tab", "k"
-  ctrl?: boolean;
-  alt?: boolean;
-  shift?: boolean;
-}
-
-interface AppSettings {
-  apiKey?: string;
-  endpoint?: string;
-  model?: string;
-  theme: ThemeName;
-  showTimestamps: boolean;
-  autoScroll: boolean;
-  version: number;
-  keybindings: Record<Action, KeySpec[]>;
-}
-
-interface CustomCommand {
-  id: string;
-  name: string;
-  description: string;
-  command: string;
-}
-
-// --- OpenAI Responses API (streaming) integration ---
-const OPENAI_BASE_URL = process.env.OPENAI_BASE_URL;
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-const OPENAI_MODEL = process.env.OPENAI_MODEL;
-
-function getAuthHeader(
-  baseUrl: string | undefined,
-  apiKey: string
-): Record<string, string> {
-  // Use Azure-compatible header if the base URL looks like Azure; otherwise standard Bearer
-  if (
-    baseUrl &&
-    (baseUrl.includes("azure.com") || baseUrl.includes("/openai/"))
-  ) {
-    return { "api-key": apiKey };
-  }
-  return { Authorization: `Bearer ${apiKey}` };
-}
-
-// Build a plain-text prompt from history for broad compatibility with proxies
-function buildResponsesInput(history: Message[]) {
-  const lines: string[] = [];
-  for (const m of history) {
-    const role =
-      m.role === "assistant"
-        ? "Assistant"
-        : m.role === "system"
-        ? "System"
-        : "User";
-    lines.push(`${role}: ${m.content}`);
-  }
-  lines.push("Assistant:");
-  return lines.join("\n\n");
-}
+import type {
+  Message,
+  Session,
+  AppSettings,
+  CustomCommand,
+  KeySpec,
+  ThemeName,
+  Action,
+  InputMode,
+  Prompt,
+} from "./types.ts";
+import {
+  loadSettings,
+  saveSettings,
+  loadSessions,
+  saveSessions,
+  loadCustomCommands,
+  saveCustomCommands,
+  defaultSettings,
+  defaultKeybindings,
+} from "./storage.ts";
+import {
+  OPENAI_BASE_URL,
+  OPENAI_API_KEY,
+  OPENAI_MODEL,
+  AF_BRIDGE_BASE_URL,
+  AF_MODEL,
+  getAuthHeader,
+  buildResponsesInput,
+} from "./api.ts";
+import { parseSSEStream } from "./sse.ts";
+import { formatRequestInfoForDisplay } from "./af.ts";
+import {
+  handleClearCommand,
+  handleHelpCommand,
+  handleModelCommand,
+  handleEndpointCommand,
+  handleApiKeyCommand,
+  handleSettingsCommand,
+  handleSessionsCommand,
+  handleStatusCommand,
+  handleTerminalSetupCommand,
+  handleCommandsCommand,
+  handleThemeCommand,
+  handleExportCommand,
+  handleUnknownCommand,
+  type CommandContext,
+} from "./commandHandlers.ts";
+import { formatMessageWithMentions } from "./mentionHandlers.ts";
+import { createStdoutWithDimensions } from "./utils.ts";
 
 async function streamResponseFromOpenAI(params: {
   history: Message[];
@@ -132,69 +103,16 @@ async function streamResponseFromOpenAI(params: {
     }
 
     const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-
-    let buf = "";
-    let currentEvent: string | null = null;
-
-    // SSE parsing: events separated by blank lines; each event has optional "event:" and one or more "data:" lines
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buf += decoder.decode(value, { stream: true });
-
-      // Split by lines and process whenever we hit a blank line
-      const parts = buf.split(/\r?\n/);
-      // Keep the last partial line in buffer
-      buf = parts.pop() || "";
-
-      for (const line of parts) {
-        if (line.startsWith("event:")) {
-          currentEvent = line.slice(6).trim();
-        } else if (line.startsWith("data:")) {
-          const jsonStr = line.slice(5).trim();
-          if (jsonStr === "[DONE]") {
-            currentEvent = null;
-            continue;
-          }
-          try {
-            const payload = jsonStr ? JSON.parse(jsonStr) : null;
-            // Handle common Responses API streaming events
-            // Prefer output_text.delta/ message delta styles
-            if (
-              currentEvent === "response.output_text.delta" ||
-              currentEvent === "message.delta" ||
-              currentEvent === "response.delta"
-            ) {
-              const delta =
-                payload?.delta ??
-                payload?.text ??
-                payload?.content ??
-                payload?.output_text?.delta ??
-                "";
-              if (delta) onDelta(delta);
-            } else if (currentEvent === "response.error") {
-              const msg =
-                payload?.error?.message || payload?.message || "Unknown error";
-              throw new Error(msg);
-            } else if (currentEvent === "response.completed") {
-              // completion signal
-              currentEvent = null;
-            } else if (payload && typeof payload === "object") {
-              // Fallback: if we see any payload with text, append
-              const fallback =
-                payload?.delta ?? payload?.text ?? payload?.content;
-              if (typeof fallback === "string" && fallback) onDelta(fallback);
-            }
-          } catch (e: any) {
-            // Ignore parse errors for keep-alive/comment lines
-          }
-        } else if (line.trim() === "") {
-          // End of event
-          currentEvent = null;
+    await parseSSEStream(reader, {
+      onDelta,
+      onError,
+      onTraceComplete: (payload) => {
+        const formatted = formatRequestInfoForDisplay(payload);
+        if (formatted) {
+          onDelta(formatted);
         }
-      }
-    }
+      },
+    });
 
     onDone();
   } catch (err: any) {
@@ -203,124 +121,8 @@ async function streamResponseFromOpenAI(params: {
   }
 }
 
-type InputMode =
-  | "chat"
-  | "command"
-  | "mention"
-  | "model-input"
-  | "settings-menu";
-
-const STORAGE_KEY_SETTINGS = "qlaw_settings";
-const STORAGE_KEY_SESSIONS = "qlaw_sessions";
-const STORAGE_KEY_COMMANDS = "qlaw_custom_commands";
-
-const defaultKeybindings: Record<Action, KeySpec[]> = {
-  nextSuggestion: [{ name: "down" }],
-  prevSuggestion: [{ name: "up" }],
-  autocomplete: [{ name: "tab" }],
-};
-
-// Helper functions for localStorage
-function loadSettings(): AppSettings {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY_SETTINGS);
-    if (stored) {
-      const parsed = JSON.parse(stored);
-      return {
-        ...defaultSettings,
-        ...parsed,
-        keybindings: parsed.keybindings || defaultKeybindings,
-        version: 1,
-      };
-    }
-  } catch (e) {
-    console.error("Failed to load settings:", e);
-  }
-  return defaultSettings;
-}
-
-function saveSettings(settings: AppSettings) {
-  try {
-    localStorage.setItem(STORAGE_KEY_SETTINGS, JSON.stringify(settings));
-  } catch (e) {
-    console.error("Failed to save settings:", e);
-  }
-}
-
-function loadSessions(): Session[] {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY_SESSIONS);
-    if (stored) {
-      return JSON.parse(stored, (key, value) => {
-        if (key === "createdAt" || key === "updatedAt" || key === "timestamp") {
-          return new Date(value);
-        }
-        return value;
-      });
-    }
-  } catch (e) {
-    console.error("Failed to load sessions:", e);
-  }
-  return [];
-}
-
-function saveSessions(sessions: Session[]) {
-  try {
-    localStorage.setItem(STORAGE_KEY_SESSIONS, JSON.stringify(sessions));
-  } catch (e) {
-    console.error("Failed to save sessions:", e);
-  }
-}
-
-function loadCustomCommands(): CustomCommand[] {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY_COMMANDS);
-    if (stored) {
-      return JSON.parse(stored);
-    }
-  } catch (e) {
-    console.error("Failed to load custom commands:", e);
-  }
-  return [];
-}
-
-function saveCustomCommands(commands: CustomCommand[]) {
-  try {
-    localStorage.setItem(STORAGE_KEY_COMMANDS, JSON.stringify(commands));
-  } catch (e) {
-    console.error("Failed to save custom commands:", e);
-  }
-}
-
-const defaultSettings: AppSettings = {
-  theme: "dark",
-  showTimestamps: false,
-  autoScroll: true,
-  model: OPENAI_MODEL,
-  endpoint: OPENAI_BASE_URL,
-  apiKey: OPENAI_API_KEY,
-  version: 1,
-  keybindings: defaultKeybindings,
-};
-
 // Spinner frames for streaming indicator
 const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
-
-type Prompt =
-  | {
-      type: "confirm";
-      message: string;
-      onConfirm: () => void;
-      onCancel?: () => void;
-    }
-  | {
-      type: "input";
-      message: string;
-      defaultValue?: string;
-      placeholder?: string;
-      onConfirm: (value: string) => void;
-      onCancel?: () => void;
-    };
 
 function App() {
   const renderer = useRenderer();
@@ -342,6 +144,7 @@ function App() {
   const [showSessionList, setShowSessionList] = useState(false);
   const [showSettingsMenu, setShowSettingsMenu] = useState(false);
   const [prompt, setPrompt] = useState<Prompt | null>(null);
+  const [promptInputValue, setPromptInputValue] = useState("");
   const scrollBoxRef = useRef<any>(null);
 
   const COLORS = useMemo(() => getTheme(settings.theme), [settings.theme]);
@@ -360,12 +163,15 @@ function App() {
     [settings.keybindings]
   );
 
-  // Auto-scroll to bottom when new messages arrive
+  // Auto-scroll to bottom when new messages arrive or update
   useEffect(() => {
-    if (settings.autoScroll && scrollBoxRef.current) {
-      scrollBoxRef.current.scrollToBottom?.();
+    if (scrollBoxRef.current && messages.length > 0) {
+      // Always scroll to bottom when messages change
+      setTimeout(() => {
+        scrollBoxRef.current?.scrollToBottom?.();
+      }, 0);
     }
-  }, [messages, settings.autoScroll]);
+  }, [messages]);
 
   // Streaming spinner
   useEffect(() => {
@@ -404,6 +210,15 @@ function App() {
     }
   }, [messages, currentSessionId]);
 
+  // Initialize prompt input value when prompt opens
+  useEffect(() => {
+    if (prompt && prompt.type === "input") {
+      setPromptInputValue(prompt.defaultValue || "");
+    } else if (!prompt) {
+      setPromptInputValue("");
+    }
+  }, [prompt]);
+
   // Command / mention detection + fuzzy suggestions
   useEffect(() => {
     if (input.startsWith("/")) {
@@ -438,14 +253,24 @@ function App() {
   }, [input, customCommands]);
 
   useKeyboard((key) => {
-    // If a prompt is open, handle Esc and let overlay input handle Submit
+    // If a prompt is open, handle Esc and Enter
     if (prompt) {
       if (key.name === "escape") {
         prompt.onCancel?.();
         setPrompt(null);
+        setPromptInputValue("");
         return;
       }
-      return; // ignore other keys (overlay input will capture enter)
+      if (key.name === "enter" && prompt.type === "confirm") {
+        prompt.onConfirm();
+        setPrompt(null);
+        setPromptInputValue("");
+        return;
+      }
+      // For input type prompts, let the input component handle Enter
+      if (prompt.type === "input") {
+        return; // input component will handle enter via onSubmit
+      }
     }
 
     // Settings overlay navigation
@@ -516,228 +341,72 @@ function App() {
   const executeCommand = useCallback(
     (command: string, args?: string) => {
       const cmd = command.toLowerCase();
-      const systemMsg: Message = {
-        id: Date.now().toString(),
-        role: "system",
-        content: "",
-        timestamp: new Date(),
+      const context: CommandContext = {
+        settings,
+        sessions,
+        messages,
+        customCommands,
+        currentSessionId,
+        setSettings,
+        setMessages,
+        setPrompt,
+        setPromptInputValue,
+        setShowSettingsMenu,
+        setShowSessionList,
       };
 
+      let result: { systemMessage?: Message; shouldReturn?: boolean };
+
       switch (cmd) {
-        case "clear": {
-          if (messages.length > 0) {
-            setPrompt({
-              type: "confirm",
-              message: "Clear all messages?",
-              onConfirm: () => {
-                setMessages([]);
-                setPrompt(null);
-              },
-              onCancel: () => setPrompt(null),
-            });
-          }
-          return;
-        }
-
+        case "clear":
+          result = handleClearCommand(context);
+          break;
         case "help":
-          systemMsg.content = `Available commands:
-/clear              Clear all messages
-/help               Show this help
-/model              Set the model name
-/endpoint           Set the API endpoint base URL
-/api-key            Set the API key
-/settings           Configure application settings
-/sessions           List and select previous sessions
-/status             Show current status and configuration
-/terminal-setup     Configure terminal keybindings
-/commands           Manage custom commands
-/export             Export chat
-/theme              Toggle theme
-
-Mentions:
-@context - Add context
-@file - Reference file
-@code - Code snippet
-@docs - Documentation`;
+          result = handleHelpCommand();
           break;
-
-        case "model": {
-          const val = args?.trim();
-          if (val) {
-            setSettings((prev) => ({ ...prev, model: val }));
-            systemMsg.content = `Model set to: ${val}`;
-          } else {
-            setPrompt({
-              type: "input",
-              message: "Enter model name:",
-              defaultValue: settings.model || "",
-              onConfirm: (v) => {
-                setSettings((prev) => ({ ...prev, model: v.trim() }));
-                setPrompt(null);
-                setMessages((prev) => [
-                  ...prev,
-                  { id: Date.now().toString(), role: "system", content: `Model set to: ${v.trim()}`, timestamp: new Date() },
-                ]);
-              },
-              onCancel: () => setPrompt(null),
-            });
-          }
+        case "model":
+          result = handleModelCommand(args, context);
           break;
-        }
-
-        case "endpoint": {
-          const val = args?.trim();
-          if (val) {
-            setSettings((prev) => ({ ...prev, endpoint: val }));
-            systemMsg.content = `Endpoint set to: ${val}`;
-          } else {
-            setPrompt({
-              type: "input",
-              message: "Enter API endpoint base URL:",
-              defaultValue: settings.endpoint || "",
-              onConfirm: (v) => {
-                setSettings((prev) => ({ ...prev, endpoint: v.trim() }));
-                setPrompt(null);
-                setMessages((prev) => [
-                  ...prev,
-                  { id: Date.now().toString(), role: "system", content: `Endpoint set to: ${v.trim()}` , timestamp: new Date() },
-                ]);
-              },
-              onCancel: () => setPrompt(null),
-            });
-          }
+        case "endpoint":
+          result = handleEndpointCommand(args, context);
           break;
-        }
-
-        case "api-key": {
-          const val = args?.trim();
-          if (val) {
-            setSettings((prev) => ({ ...prev, apiKey: val }));
-            systemMsg.content = `API key updated.`;
-          } else {
-            setPrompt({
-              type: "input",
-              message: "Enter API key:",
-              defaultValue: settings.apiKey || "",
-              onConfirm: (v) => {
-                setSettings((prev) => ({ ...prev, apiKey: v.trim() }));
-                setPrompt(null);
-                setMessages((prev) => [
-                  ...prev,
-                  { id: Date.now().toString(), role: "system", content: `API key updated.` , timestamp: new Date() },
-                ]);
-              },
-              onCancel: () => setPrompt(null),
-            });
-          }
+        case "api-key":
+          result = handleApiKeyCommand(args, context);
           break;
-        }
-
         case "settings":
-          setShowSettingsMenu(true);
-          return;
-
+          result = handleSettingsCommand(context);
+          break;
         case "sessions":
-          setShowSessionList(true);
-          return;
-
+          result = handleSessionsCommand(context);
+          break;
         case "status":
-          systemMsg.content = `Current Configuration:
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Model:        ${settings.model || "Not set"}
-Endpoint:     ${settings.endpoint || "Not set"}
-API Key:      ${settings.apiKey ? "***" + settings.apiKey.slice(-4) : "Not set"}
-Theme:        ${settings.theme}
-Timestamps:   ${settings.showTimestamps ? "Shown" : "Hidden"}
-Auto-scroll:  ${settings.autoScroll ? "Enabled" : "Disabled"}
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Sessions:     ${sessions.length} saved
-Messages:     ${messages.length} in current chat
-Custom Cmds:  ${customCommands.length} defined`;
+          result = handleStatusCommand(context);
           break;
-
         case "terminal-setup":
-          systemMsg.content = `Terminal Keybindings Setup:
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-For multiline input support:
-
-VS Code / Cursor / Windsurf:
-  Add to keybindings.json:
-  {
-    "key": "shift+enter",
-    "command": "workbench.action.terminal.sendSequence",
-    "args": { "text": "\\n" }
-  }
-
-Windows Terminal:
-  Add to settings.json:
-  {
-    "command": { "action": "sendInput", "input": "\\n" },
-    "keys": "shift+enter"
-  }
-
-Current shortcuts:
-  Ctrl+C / Esc  - Exit
-  Ctrl+K        - Toggle debug console`;
+          result = handleTerminalSetupCommand();
           break;
-
         case "commands":
-          if (customCommands.length === 0) {
-            systemMsg.content = `Custom Commands:
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-No custom commands defined yet.
-
-To add a command, use:
-/commands add <name> <description> <command>
-
-Example:
-/commands add git-status "Show git status" "git status"`;
-          } else {
-            const cmdList = customCommands
-              .map(
-                (c, i) =>
-                  `${i + 1}. /${c.name}\n   ${c.description}\n   → ${c.command}`
-              )
-              .join("\n\n");
-            systemMsg.content = `Custom Commands:\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n${cmdList}\n\nUse: /commands remove <name>`;
-          }
+          result = handleCommandsCommand(context);
           break;
-
-        case "theme": {
-          const newTheme: ThemeName = settings.theme === "dark" ? "light" : "dark";
-          setSettings((prev) => ({ ...prev, theme: newTheme }));
-          systemMsg.content = `Theme changed to: ${newTheme}`;
+        case "theme":
+          result = handleThemeCommand(context);
           break;
-        }
-
-        case "export": {
-          const exportData = {
-            session: {
-              id: currentSessionId || "current",
-              exportedAt: new Date().toISOString(),
-            },
-            messages,
-            settings,
-          };
-          systemMsg.content = `Chat export:\n${JSON.stringify(exportData, null, 2)}`;
+        case "export":
+          result = handleExportCommand(context);
           break;
-        }
-
-        default: {
-          // Check custom commands
-          const customCmd = customCommands.find((c) => c.name === cmd);
-          if (customCmd) {
-            systemMsg.content = `Executing: ${customCmd.command}\n(Custom command execution not yet implemented)`;
-          } else {
-            systemMsg.content = `Unknown command: /${cmd}\nType /help for available commands`;
-          }
-        }
+        default:
+          result = handleUnknownCommand(cmd, context);
       }
 
-      setMessages((prev) => [...prev, systemMsg]);
+      if (result.shouldReturn) {
+        return;
+      }
+
+      if (result.systemMessage) {
+        setMessages((prev) => [...prev, result.systemMessage!]);
+      }
     },
-    [settings, sessions, messages, customCommands, currentSessionId]
+    [settings, sessions, messages, customCommands, currentSessionId, setSettings, setMessages, setPrompt, setPromptInputValue, setShowSettingsMenu, setShowSessionList]
   );
 
   const handleSubmit = useCallback(() => {
@@ -778,10 +447,13 @@ Example:
       return;
     }
 
+    // Format message with mentions if present
+    const formattedInput = formatMessageWithMentions(input.trim());
+    
     const userMessage: Message = {
       id: Date.now().toString(),
       role: "user",
-      content: input.trim(),
+      content: formattedInput,
       timestamp: new Date(),
     };
 
@@ -803,25 +475,54 @@ Example:
     // Build history for this turn (use current state + new user)
     const historyForApi = [...messages, userMessage];
 
-    // Stream from OpenAI Responses API
-    streamResponseFromOpenAI({
-      history: historyForApi,
-      onDelta: (chunk) => {
-        setMessages((prev) =>
-          prev.map((m) => (m.id === assistantMessageId ? { ...m, content: m.content + chunk } : m))
-        );
-      },
-      onError: (err) => {
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === assistantMessageId ? { ...m, content: m.content + `\n\n[Error] ${err.message}` } : m
-          )
-        );
-      },
-      onDone: () => {
-        setIsProcessing(false);
-      },
-    });
+// Route based on AF bridge configuration
+    const useAf = !!settings.afBridgeBaseUrl && !!(settings.afModel || settings.model);
+
+    if (useAf) {
+      // Stream from AF bridge using model and optional conversation id
+      const modelId = settings.afModel || settings.model || "workflow";
+      streamResponseFromAFBridge({
+        baseUrl: settings.afBridgeBaseUrl!,
+        model: modelId,
+        conversation: undefined, // optional: bind a conversation id here if desired
+        input: input.trim(),
+        onDelta: (chunk) => {
+          setMessages((prev) =>
+            prev.map((m) => (m.id === assistantMessageId ? { ...m, content: m.content + chunk } : m))
+          );
+        },
+        onError: (err) => {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === assistantMessageId ? { ...m, content: m.content + `\n\n[Error] ${err.message}` } : m
+            )
+          );
+        },
+        onDone: () => {
+          setIsProcessing(false);
+        },
+      });
+    } else {
+      // Stream from OpenAI Responses API
+      streamResponseFromOpenAI({
+        history: historyForApi,
+        onDelta: (chunk) => {
+          setMessages((prev) =>
+            prev.map((m) => (m.id === assistantMessageId ? { ...m, content: m.content + chunk } : m))
+          );
+        },
+        onError: (err) => {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === assistantMessageId ? { ...m, content: m.content + `\n\n[Error] ${err.message}` } : m
+            )
+          );
+        },
+        onDone: () => {
+          setIsProcessing(false);
+        },
+      });
+    }
   }, [input, isProcessing, inputMode, executeCommand, messages, suggestions, selectedSuggestionIndex]);
 
   // Show welcome screen if no messages
@@ -1011,26 +712,21 @@ Example:
               >
                 <input
                   placeholder={prompt.placeholder || "Type and press Enter"}
-                  value={prompt.defaultValue || ""}
-                  onInput={(v: string) => (prompt.defaultValue = v)}
+                  value={promptInputValue}
+                  onInput={(v: string) => setPromptInputValue(v)}
                   onSubmit={() => {
-                    prompt.onConfirm(prompt.defaultValue || "");
+                    prompt.onConfirm(promptInputValue);
+                    setPromptInputValue("");
                   }}
                   focused={true}
                   style={{ flexGrow: 1, backgroundColor: COLORS.bg.primary, focusedBackgroundColor: COLORS.bg.primary }}
                 />
               </box>
             ) : (
-              <box style={{ marginTop: 1 }}>
-                <input
-                  placeholder="Press Enter to confirm · Esc to cancel"
-                  value=""
-                  onInput={() => {}}
-                  onSubmit={() => prompt.onConfirm()}
-                  focused={true}
-                  style={{ flexGrow: 1, backgroundColor: COLORS.bg.primary, focusedBackgroundColor: COLORS.bg.primary }}
-                />
-              </box>
+              <text
+                content="Press Enter to confirm · Esc to cancel"
+                style={{ fg: COLORS.text.dim, attributes: TextAttributes.DIM, marginTop: 1 }}
+              />
             )}
           </box>
         </box>
@@ -1076,6 +772,8 @@ Example:
           paddingTop: 1,
           paddingBottom: 0,
           flexDirection: "column",
+          minHeight: 5,
+          flexShrink: 0,
         }}
       >
         {/* Command/Mention Suggestions Dropdown */}
@@ -1136,6 +834,8 @@ Example:
             paddingBottom: 1,
             marginBottom: 1,
             height: 3,
+            minHeight: 3,
+            flexShrink: 0,
           }}
         >
           <text content="> " style={{ fg: COLORS.text.secondary }} />
@@ -1145,8 +845,6 @@ Example:
                 ? "Type command name..."
                 : inputMode === "mention"
                 ? "Select mention type..."
-                : inputMode === "model-input"
-                ? "Enter model name..."
                 : "Write a message…"
             }
             value={input}
@@ -1176,5 +874,48 @@ Example:
   );
 }
 
-const renderer = await createCliRenderer();
+// --- AF bridge helpers ---
+async function streamResponseFromAFBridge(params: {
+  baseUrl: string;
+  model: string;
+  conversation?: string | { id: string };
+  input: string;
+  onDelta: (text: string) => void;
+  onError: (err: Error) => void;
+  onDone: () => void;
+}) {
+  const { baseUrl, model, conversation, input, onDelta, onError, onDone } = params;
+  try {
+    const url = `${baseUrl.replace(/\/$/, "")}/v1/responses`;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
+      body: JSON.stringify({ model, input, stream: true, ...(conversation ? { conversation } : {}) }),
+    });
+    if (!res.ok || !res.body) {
+      const text = await res.text().catch(() => "");
+      throw new Error(`HTTP ${res.status} ${res.statusText}${text ? ` - ${text}` : ""}`);
+    }
+    const reader = res.body.getReader();
+    await parseSSEStream(reader, {
+      onDelta,
+      onError,
+      onTraceComplete: (payload) => {
+        const formatted = formatRequestInfoForDisplay(payload);
+        if (formatted) {
+          onDelta(formatted);
+        }
+      },
+    });
+    onDone();
+  } catch (err: any) {
+    onError(err instanceof Error ? err : new Error(String(err)));
+    onDone();
+  }
+}
+
+// Setup terminal with dimensions
+const stdoutWithDimensions = createStdoutWithDimensions();
+
+const renderer = await createCliRenderer({ stdout: stdoutWithDimensions });
 createRoot(renderer).render(<App />);

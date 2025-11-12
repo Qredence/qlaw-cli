@@ -48,8 +48,8 @@ export interface MentionMeta {
 }
 
 export const MENTIONS: MentionMeta[] = [
-  { name: "context", description: "Add context" },
-  { name: "file", description: "Reference file" },
-  { name: "code", description: "Code snippet" },
-  { name: "docs", description: "Documentation" },
+  { name: "context", description: "Add context to your message" },
+  { name: "file", description: "Reference a file (e.g., @file path/to/file)" },
+  { name: "code", description: "Include a code snippet (e.g., @code your code here)" },
+  { name: "docs", description: "Reference documentation (e.g., @docs topic)" },
 ];

@@ -9,7 +9,18 @@ This project implements an interactive terminal chat interface similar to OpenCo
 ```
 qlaw-cli/
 ├── src/
-│   └── index.tsx          # Main application
+│   ├── index.tsx          # Main application (UI and orchestration)
+│   ├── commandHandlers.ts # Command execution handlers
+│   ├── mentionHandlers.ts # Mention formatting and processing
+│   ├── commands.ts        # Command and mention definitions
+│   ├── types.ts           # TypeScript type definitions
+│   ├── storage.ts         # Persistence layer (settings, sessions)
+│   ├── api.ts             # API integration utilities
+│   ├── sse.ts             # SSE stream parsing
+│   ├── af.ts              # Agent Framework integration
+│   ├── suggest.ts         # Fuzzy matching for autocomplete
+│   ├── themes.ts          # Theme definitions
+│   └── utils.ts           # Terminal and utility functions
 ├── examples/
 │   ├── api-integration.tsx
 │   └── README.md
@@ -27,24 +38,61 @@ qlaw-cli/
 
 ### Main Chat Interface (`src/index.tsx`)
 
-The application includes:
+The main application file (923 lines) handles UI rendering and orchestration:
 
-- **OpenAI/Azure Integration**: Real API integration with streaming support
-- **Session Management**: Multiple conversations with persistent storage
-- **Command System**: 10+ built-in commands with extensibility
-- **Mention System**: Context, file, code, and docs references
-- **Autocomplete**: Intelligent suggestion system with keyboard navigation
-- **Settings Persistence**: Preferences saved via localStorage
-- **Overlay Menus**: Settings and session list interfaces
+- **UI Components**: Message display, input area, overlays, suggestions
+- **State Management**: React hooks for messages, sessions, settings, input modes
+- **Event Handling**: Keyboard shortcuts, input submission, command execution
+- **Streaming Integration**: Coordinates with API modules for streaming responses
 
-#### Key Features:
+### Command Handlers (`src/commandHandlers.ts`)
 
-- Streaming AI responses with OpenAI API
-- Custom command registration and handling
-- Session switching and history management
-- Smart input modes (normal, command, mention)
-- Keyboard-driven navigation throughout
-- Responsive layout adapting to terminal size
+Modular command execution system:
+
+- Individual handler functions for each command (`handleClearCommand`, `handleHelpCommand`, etc.)
+- Command context interface for shared state access
+- Consistent return type for command results
+- Improves testability and maintainability
+
+**Available Commands:**
+- `/clear` - Clear chat history
+- `/help` - Show help information
+- `/model` - Set model name
+- `/endpoint` - Set API endpoint
+- `/api-key` - Set API key
+- `/settings` - Open settings menu
+- `/sessions` - View sessions
+- `/status` - Show status
+- `/terminal-setup` - Terminal setup guide
+- `/commands` - Manage custom commands
+- `/theme` - Toggle theme
+- `/export` - Export chat
+
+### Mention Handlers (`src/mentionHandlers.ts`)
+
+Mention processing and formatting:
+
+- **`detectMentions()`**: Finds all mentions in text
+- **`formatMessageWithMentions()`**: Formats messages with structured mention blocks
+- **Mention Types**: `@context`, `@file`, `@code`, `@docs`
+- Automatically formats mentions to provide structured context to AI
+
+**Example:**
+```typescript
+@docs API authentication
+// Formats to:
+[Documentation Reference: API authentication]
+
+Please reference the documentation for "API authentication" when providing your response.
+```
+
+### Utilities (`src/utils.ts`)
+
+Terminal and common utilities:
+
+- **`getTerminalDimensions()`**: Gets terminal size with fallbacks
+- **`createStdoutWithDimensions()`**: Creates stdout wrapper with dimensions
+- Handles edge cases for non-interactive environments
 
 ## Component Architecture
 
