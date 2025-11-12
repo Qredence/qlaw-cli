@@ -55,11 +55,21 @@ import {
   handleCommandsCommand,
   handleThemeCommand,
   handleExportCommand,
+  handleExitCommand,
+  handlePwdCommand,
+  handleCwdCommand,
   handleUnknownCommand,
+  handleModeCommand,
+  handleWorkflowCommand,
+  handleAgentsCommand,
+  handleRunCommand,
+  handleContinueCommand,
+  handleJudgeCommand,
   type CommandContext,
 } from "./commandHandlers.ts";
 import { formatMessageWithMentions } from "./mentionHandlers.ts";
 import { createStdoutWithDimensions } from "./utils.ts";
+import { startWorkflow } from "./workflow.ts";
 
 async function streamResponseFromOpenAI(params: {
   history: Message[];
@@ -132,6 +142,7 @@ function App() {
   const [requestStartAt, setRequestStartAt] = useState<number | null>(null);
   const [spinnerIndex, setSpinnerIndex] = useState(0);
   const [inputMode, setInputMode] = useState<InputMode>("chat");
+  const [mode, setMode] = useState<"standard" | "workflow">("standard");
   type UISuggestion = { label: string; description?: string; kind: "command" | "custom-command" | "mention" };
   const [suggestions, setSuggestions] = useState<UISuggestion[]>([]);
   const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(0);
@@ -163,15 +174,14 @@ function App() {
     [settings.keybindings]
   );
 
-  // Auto-scroll to bottom when new messages arrive or update
+  // Auto-scroll to bottom when new messages arrive if enabled
   useEffect(() => {
-    if (scrollBoxRef.current && messages.length > 0) {
-      // Always scroll to bottom when messages change
+    if (scrollBoxRef.current && messages.length > 0 && settings.autoScroll) {
       setTimeout(() => {
         scrollBoxRef.current?.scrollToBottom?.();
       }, 0);
     }
-  }, [messages]);
+  }, [messages, settings.autoScroll]);
 
   // Streaming spinner
   useEffect(() => {
@@ -327,11 +337,27 @@ function App() {
       return;
     }
 
+    // Toggle mode with Ctrl+M
+    if (key.ctrl && key.name === "m") {
+      setMode((prev) => (prev === "standard" ? "workflow" : "standard"));
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: Date.now().toString(),
+          role: "system",
+          content: `Mode toggled to: ${mode === "standard" ? "workflow" : "standard"}`,
+          timestamp: new Date(),
+        },
+      ]);
+      return;
+    }
+
     // Exit with Ctrl+C
     if (key.ctrl && key.name === "c") {
       renderer?.stop();
       return;
     }
+
   });
 
   const handleInput = useCallback((value: string) => {
@@ -353,13 +379,14 @@ function App() {
         setPromptInputValue,
         setShowSettingsMenu,
         setShowSessionList,
+        setMode,
       };
 
       let result: { systemMessage?: Message; shouldReturn?: boolean };
 
       switch (cmd) {
         case "clear":
-          result = handleClearCommand(context);
+          result = handleClearCommand(context, args);
           break;
         case "help":
           result = handleHelpCommand();
@@ -393,6 +420,35 @@ function App() {
           break;
         case "export":
           result = handleExportCommand(context);
+          break;
+        case "exit":
+        case "quit":
+          context.stop = () => renderer?.stop();
+          result = handleExitCommand(context);
+          break;
+        case "pwd":
+          result = handlePwdCommand();
+          break;
+        case "cwd":
+          result = handleCwdCommand(args);
+          break;
+        case "mode":
+          result = handleModeCommand(args, context);
+          break;
+        case "workflow":
+          result = handleWorkflowCommand();
+          break;
+        case "agents":
+          result = handleAgentsCommand();
+          break;
+        case "run":
+          result = handleRunCommand();
+          break;
+        case "continue":
+          result = handleContinueCommand();
+          break;
+        case "judge":
+          result = handleJudgeCommand();
           break;
         default:
           result = handleUnknownCommand(cmd, context);
@@ -476,15 +532,14 @@ function App() {
     const historyForApi = [...messages, userMessage];
 
 // Route based on AF bridge configuration
-    const useAf = !!settings.afBridgeBaseUrl && !!(settings.afModel || settings.model);
+    const useAf = mode === "workflow" && !!settings.afBridgeBaseUrl && !!(settings.afModel || settings.model);
 
     if (useAf) {
-      // Stream from AF bridge using model and optional conversation id
       const modelId = settings.afModel || settings.model || "workflow";
-      streamResponseFromAFBridge({
+      startWorkflow({
         baseUrl: settings.afBridgeBaseUrl!,
         model: modelId,
-        conversation: undefined, // optional: bind a conversation id here if desired
+        conversation: undefined,
         input: input.trim(),
         onDelta: (chunk) => {
           setMessages((prev) =>
@@ -547,7 +602,7 @@ function App() {
         }}
       >
         <text content="QLAW CLI" style={{ fg: COLORS.text.secondary, attributes: TextAttributes.DIM }} />
-        <text content="" style={{ fg: COLORS.text.dim, attributes: TextAttributes.DIM }} />
+        <text content={`Mode: ${mode === "workflow" ? "Workflow" : "Standard"}`} style={{ fg: COLORS.text.dim, attributes: TextAttributes.DIM }} />
       </box>
 
       {/* Main Content Area */}
@@ -640,6 +695,21 @@ function App() {
                   content={message.content}
                   style={{ fg: COLORS.text.primary }}
                 />
+                {isProcessing && index === messages.length - 1 && (
+                  <box style={{ marginTop: 1 }}>
+                    {(() => {
+                      const total = 20;
+                      const filled = Math.min(total, Math.max(1, (elapsedSec % total)));
+                      const bar = "".padEnd(filled, "=") + "".padEnd(total - filled, " ");
+                      return (
+                        <text
+                          content={`Progress: [${bar}] ${elapsedSec}s`}
+                          style={{ fg: COLORS.text.dim, attributes: TextAttributes.DIM }}
+                        />
+                      );
+                    })()}
+                  </box>
+                )}
               </box>
             ))}
           </box>
@@ -761,6 +831,7 @@ function App() {
         </box>
       )}
 
+
       {/* Input Area */}
       <box
         style={{
@@ -863,7 +934,7 @@ function App() {
                 ? `Warping... (esc to interrupt · ${elapsedSec}s)`
                 : suggestions.length > 0
                 ? "↑↓ navigate · tab autocomplete · enter submit"
-                : "? for shortcuts"
+                : `Type /help · Mode: ${mode === "workflow" ? "Workflow" : "Standard"}`
             }
             style={{ fg: COLORS.text.dim, attributes: TextAttributes.DIM }}
           />

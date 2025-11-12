@@ -11,11 +11,20 @@ export function parseRequestInfoEvent(payload: any): PendingRequest | null {
     if (data?.trace_type !== "workflow_info" || data?.event_type !== "RequestInfoEvent") return null;
     const ri = data?.data?.request_info || payload?.request_info;
     if (!ri?.request_id) return null;
+    
+    const conversation = Array.isArray(ri.data?.conversation) 
+      ? ri.data.conversation.filter((m: any) => 
+          typeof m === 'object' && m !== null && 
+          typeof m.role === 'string' && 
+          typeof m.text === 'string'
+        )
+      : [];
+    
     return {
       requestId: ri.request_id,
       sourceExecutorId: ri.source_executor_id || "",
       prompt: ri.data?.prompt || "",
-      conversation: Array.isArray(ri.data?.conversation) ? ri.data.conversation : [],
+      conversation,
     };
   } catch {
     return null;

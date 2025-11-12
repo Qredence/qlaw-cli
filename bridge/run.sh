@@ -23,7 +23,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd -P)"
 # Candidate path where 'agent_framework' package directory exists
 CAND_PY_PATH_1="$REPO_ROOT/../agent-framework/agent-framework/python/packages/core"
 if [[ -d "$CAND_PY_PATH_1/agent_framework" ]]; then
-  export PYTHONPATH="${PYTHONPATH:-}:$CAND_PY_PATH_1"
+  export PYTHONPATH="${PYTHONPATH:+${PYTHONPATH}:}$CAND_PY_PATH_1"
 fi
 
 if [[ -z "${OPENAI_BASE_URL:-}" || -z "${OPENAI_API_KEY:-}" || -z "${OPENAI_MODEL:-}" ]]; then

@@ -3,7 +3,7 @@
  * Formats mentions to provide structured context to the AI
  */
 
-export type MentionType = "context" | "file" | "code" | "docs";
+export type MentionType = "context" | "file" | "code" | "docs" | "coder" | "planner" | "reviewer" | "judge";
 
 export interface MentionMatch {
   type: MentionType;
@@ -17,7 +17,7 @@ export interface MentionMatch {
  */
 export function detectMentions(text: string): MentionMatch[] {
   const mentions: MentionMatch[] = [];
-  const mentionRegex = /@(context|file|code|docs)(?:\s+([^\n@]+))?/gi;
+  const mentionRegex = /@(context|file|code|docs|coder|planner|reviewer|judge)(?:\s+([^\n@]+))?/gi;
   let match;
 
   while ((match = mentionRegex.exec(text)) !== null) {
@@ -89,6 +89,12 @@ function formatMention(type: MentionType, content: string): string {
       return `[Additional Context]\n\nPlease consider any additional context when providing your response.`;
 
     default:
+      // Agent mentions route intent; include an explicit tag
+      if (type === "coder" || type === "planner" || type === "reviewer" || type === "judge") {
+        const label = type.charAt(0).toUpperCase() + type.slice(1);
+        const body = content ? `\n\n${content}` : "";
+        return `[Agent: ${label}]${body}`;
+      }
       return content;
   }
 }
@@ -97,6 +103,5 @@ function formatMention(type: MentionType, content: string): string {
  * Checks if a message contains any mentions
  */
 export function hasMentions(text: string): boolean {
-  return /@(context|file|code|docs)/i.test(text);
+  return /@(context|file|code|docs|coder|planner|reviewer|judge)/i.test(text);
 }
-

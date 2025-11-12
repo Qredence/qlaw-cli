@@ -1,7 +1,12 @@
 fastapi>=0.115.0
 uvicorn[standard]>=0.30.0
 agent-framework
-asyncio>=3.4.3
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+agent-framework
+httpx>=0.24.0
+pydantic>=2.7.0
+PyYAML>=6.0
 httpx>=0.24.0
 pydantic>=2.7.0
 PyYAML>=6.0

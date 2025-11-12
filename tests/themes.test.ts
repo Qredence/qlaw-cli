@@ -14,7 +14,7 @@ describe("themes", () => {
     });
 
     test("should return DARK theme as default for any other value", () => {
-      const theme = getTheme("dark" as any);
+      const theme = getTheme("unknown" as any);
       expect(theme).toBe(DARK);
     });
   });

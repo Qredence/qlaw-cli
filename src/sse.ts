@@ -59,17 +59,29 @@ export async function parseSSEStream(
           
           // Handle trace.complete events (e.g., RequestInfoEvent)
           if (currentEvent === "response.trace.complete" && handlers.onTraceComplete) {
-            handlers.onTraceComplete(payload);
+            try {
+              handlers.onTraceComplete(payload);
+            } catch (e: any) {
+              console.error("Error in onTraceComplete handler:", e);
+            }
           }
           // Handle trace.complete from payload type field
           else if (payload?.type === "response.trace.complete" && handlers.onTraceComplete) {
-            handlers.onTraceComplete(payload);
+            try {
+              handlers.onTraceComplete(payload);
+            } catch (e: any) {
+              console.error("Error in onTraceComplete handler:", e);
+            }
           }
           // Handle error events
           else if (currentEvent === "response.error" && handlers.onError) {
             const msg =
               payload?.error?.message || payload?.message || "Unknown error";
-            handlers.onError(new Error(msg));
+            try {
+              handlers.onError(new Error(msg));
+            } catch (e: any) {
+              console.error("Error in onError handler:", e);
+            }
           }
           // Handle delta/text events
           else if (
@@ -84,7 +96,13 @@ export async function parseSSEStream(
               payload?.content ??
               payload?.output_text?.delta ??
               "";
-            if (delta) handlers.onDelta(delta);
+            if (delta) {
+              try {
+                handlers.onDelta(delta);
+              } catch (e: any) {
+                console.error("Error in onDelta handler:", e);
+              }
+            }
           }
           // Handle completion signal
           else if (currentEvent === "response.completed") {
@@ -92,7 +110,11 @@ export async function parseSSEStream(
           }
           // Handle generic error type
           else if (payload?.type === "error" && handlers.onError) {
-            handlers.onError(new Error(payload.message || "Unknown error"));
+            try {
+              handlers.onError(new Error(payload.message || "Unknown error"));
+            } catch (e: any) {
+              console.error("Error in onError handler:", e);
+            }
           }
           // Handle response.output_text.delta from type field
           else if (
@@ -100,19 +122,31 @@ export async function parseSSEStream(
             typeof payload.delta === "string" &&
             handlers.onDelta
           ) {
-            handlers.onDelta(payload.delta);
+            try {
+              handlers.onDelta(payload.delta);
+            } catch (e: any) {
+              console.error("Error in onDelta handler:", e);
+            }
           }
           // Fallback: if we see any payload with text, append
           else if (payload && typeof payload === "object" && handlers.onDelta) {
             const fallback =
               payload?.delta ?? payload?.text ?? payload?.content;
             if (typeof fallback === "string" && fallback) {
-              handlers.onDelta(fallback);
+              try {
+                handlers.onDelta(fallback);
+              } catch (e: any) {
+                console.error("Error in onDelta handler:", e);
+              }
             }
           }
           // Generic event handler
           if (handlers.onEvent) {
-            handlers.onEvent(currentEvent, payload);
+            try {
+              handlers.onEvent(currentEvent, payload);
+            } catch (e: any) {
+              console.error("Error in onEvent handler:", e);
+            }
           }
         } catch (e: any) {
           // Ignore parse errors for keep-alive/comment lines
@@ -122,6 +156,124 @@ export async function parseSSEStream(
         currentEvent = null;
       }
     }
+  }
+
+  // Process any remaining data in buffer after stream ends
+  if (buf.trim()) {
+    // Split by lines and process all remaining lines
+    const parts = buf.split(/\r?\n/);
+    for (const line of parts) {
+      if (line.startsWith("event:")) {
+        currentEvent = line.slice(6).trim();
+      } else if (line.startsWith("data:")) {
+        const jsonStr = line.slice(5).trim();
+        if (jsonStr === "[DONE]") {
+          currentEvent = null;
+          continue;
+        }
+        try {
+          const payload = jsonStr ? JSON.parse(jsonStr) : null;
+          
+          // Handle trace.complete events (e.g., RequestInfoEvent)
+          if (currentEvent === "response.trace.complete" && handlers.onTraceComplete) {
+            try {
+              handlers.onTraceComplete(payload);
+            } catch (e: any) {
+              console.error("Error in onTraceComplete handler:", e);
+            }
+          }
+          // Handle trace.complete from payload type field
+          else if (payload?.type === "response.trace.complete" && handlers.onTraceComplete) {
+            try {
+              handlers.onTraceComplete(payload);
+            } catch (e: any) {
+              console.error("Error in onTraceComplete handler:", e);
+            }
+          }
+          // Handle error events
+          else if (currentEvent === "response.error" && handlers.onError) {
+            const msg =
+              payload?.error?.message || payload?.message || "Unknown error";
+            try {
+              handlers.onError(new Error(msg));
+            } catch (e: any) {
+              console.error("Error in onError handler:", e);
+            }
+          }
+          // Handle delta/text events
+          else if (
+            (currentEvent === "response.output_text.delta" ||
+              currentEvent === "message.delta" ||
+              currentEvent === "response.delta") &&
+            handlers.onDelta
+          ) {
+            const delta =
+              payload?.delta ??
+              payload?.text ??
+              payload?.content ??
+              payload?.output_text?.delta ??
+              "";
+            if (delta) {
+              try {
+                handlers.onDelta(delta);
+              } catch (e: any) {
+                console.error("Error in onDelta handler:", e);
+              }
+            }
+          }
+          // Handle completion signal
+          else if (currentEvent === "response.completed") {
+            currentEvent = null;
+          }
+          // Handle generic error type
+          else if (payload?.type === "error" && handlers.onError) {
+            try {
+              handlers.onError(new Error(payload.message || "Unknown error"));
+            } catch (e: any) {
+              console.error("Error in onError handler:", e);
+            }
+          }
+          // Handle response.output_text.delta from type field
+          else if (
+            payload?.type === "response.output_text.delta" &&
+            typeof payload.delta === "string" &&
+            handlers.onDelta
+          ) {
+            try {
+              handlers.onDelta(payload.delta);
+            } catch (e: any) {
+              console.error("Error in onDelta handler:", e);
+            }
+          }
+          // Fallback: if we see any payload with text, append
+          else if (payload && typeof payload === "object" && handlers.onDelta) {
+            const fallback =
+              payload?.delta ?? payload?.text ?? payload?.content;
+            if (typeof fallback === "string" && fallback) {
+              try {
+                handlers.onDelta(fallback);
+              } catch (e: any) {
+                console.error("Error in onDelta handler:", e);
+              }
+            }
+          }
+          // Generic event handler
+          if (handlers.onEvent) {
+            try {
+              handlers.onEvent(currentEvent, payload);
+            } catch (e: any) {
+              console.error("Error in onEvent handler:", e);
+            }
+          }
+        } catch (e: any) {
+          // Ignore parse errors for keep-alive/comment lines
+        }
+      } else if (line.trim() === "") {
+        // End of event
+        currentEvent = null;
+      }
+    }
+    buf = "";
   }
 }
 

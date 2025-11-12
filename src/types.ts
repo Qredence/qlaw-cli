@@ -36,6 +36,25 @@ export interface AppSettings {
   // Agent Framework bridge settings
   afBridgeBaseUrl?: string;
   afModel?: string;
+  workflow?: {
+    enabled?: boolean;
+    defaultAgents?: {
+      coder?: string;
+      planner?: string;
+      reviewer?: string;
+      judge?: string;
+    };
+    keybindings?: {
+      toggleMode?: KeySpec[];
+      start?: KeySpec[];
+      pause?: KeySpec[];
+      resume?: KeySpec[];
+    };
+    options?: {
+      maxSteps?: number;
+      judgeThreshold?: number;
+    };
+  };
 }
 
 export interface CustomCommand {
@@ -66,4 +85,3 @@ export type Prompt =
       onConfirm: (value: string) => void;
       onCancel?: () => void;
     };
-

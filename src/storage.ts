@@ -31,6 +31,22 @@ export const defaultSettings: AppSettings = {
   keybindings: defaultKeybindings,
   afBridgeBaseUrl: AF_BRIDGE_BASE_URL,
   afModel: AF_MODEL,
+  workflow: {
+    enabled: false,
+    defaultAgents: {
+      coder: "coder",
+      planner: "planner",
+      reviewer: "reviewer",
+      judge: "judge",
+    },
+    keybindings: {
+      toggleMode: [{ name: "m", ctrl: true }],
+    },
+    options: {
+      maxSteps: 10,
+      judgeThreshold: 0.6,
+    },
+  },
 };
 
 // Get data directory path (~/.qlaw-cli/)
@@ -141,4 +157,3 @@ export async function saveCustomCommands(commands: CustomCommand[]): Promise<voi
     console.error("Failed to save custom commands:", e);
   }
 }
-

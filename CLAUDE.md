@@ -10,8 +10,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Core Development
 ```bash
-# Install dependencies (user preference - always use uv when possible)
-bun install
+# Install dependencies
+uv sync
 
 # Development with file watching
 bun run dev
