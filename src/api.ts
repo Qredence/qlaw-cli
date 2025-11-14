@@ -13,10 +13,21 @@ export function getAuthHeader(
 ): Record<string, string> {
   // Use Azure-compatible header if the base URL looks like Azure; otherwise standard Bearer
   if (
-    baseUrl &&
-    (baseUrl.includes("azure.com") || baseUrl.includes("/openai/"))
+    baseUrl
   ) {
-    return { "api-key": apiKey };
+    let host: string | undefined;
+    try {
+      host = new URL(baseUrl).host;
+    } catch {
+      host = undefined;
+    }
+    // Check for *.azure.com, not substring
+    if (
+      (host && (host === "azure.com" || host.endsWith(".azure.com"))) ||
+      baseUrl.includes("/openai/")
+    ) {
+      return { "api-key": apiKey };
+    }
   }
   return { Authorization: `Bearer ${apiKey}` };
 }
