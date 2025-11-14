@@ -121,10 +121,15 @@ Type `/` to see available commands:
 
 Type `@` for contextual references:
 
-- `@context` - Add contextual information
-- `@file` - Reference a file
-- `@code` - Insert code snippet
-- `@docs` - Link documentation
+- `@context <text>` - Add contextual information to your message
+- `@file <path>` - Reference a file in your message
+- `@code <snippet>` - Include a code snippet in your message
+- `@docs <topic>` - Reference documentation in your message
+
+Mentions are automatically formatted to provide structured context to the AI. For example:
+- `@docs API authentication` will format as a documentation reference
+- `@file src/index.ts` will format as a file reference
+- `@code function example() { return true; }` will format as a code snippet
 
 ### Keyboard Shortcuts
 
