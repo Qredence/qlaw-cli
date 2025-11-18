@@ -146,6 +146,8 @@ Mentions are automatically formatted to provide structured context to the AI. Fo
 - **[UI Reference](./docs/UI-REFERENCE.md)** - Visual interface guide
 - **[Design System](./docs/DESIGN.md)** - Colors, typography, and components
 - **[Changelog](./docs/CHANGELOG.md)** - Version history
+ - **[API Integration](./docs/API-INTEGRATION.md)** - Configure OpenAI/Azure/custom backends
+ - **[Agent Bridge Example](./bridge/README.md)** - Python Agent Framework bridge used by AF modes
 
 ## 🗺️ Roadmap
 

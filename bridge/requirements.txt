@@ -4,6 +4,7 @@ agent-framework
 httpx>=0.24.0
 pydantic>=2.7.0
 PyYAML>=6.0
+SQLAlchemy>=2.0
 
 # Agent Framework must be importable in your Python env
 # Option 1: pip install your local agent-framework package (editable) if available

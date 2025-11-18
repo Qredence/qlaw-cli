@@ -16,7 +16,7 @@ from fastapi import FastAPI
 from fastapi.responses import StreamingResponse, JSONResponse
 from pydantic import BaseModel
 from uuid import uuid4
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import Column, String, DateTime, Text, create_engine, select
 from sqlalchemy.orm import declarative_base, sessionmaker
 
@@ -126,6 +126,35 @@ async def _get_or_create_workflow(entity_id: str, conversation_id: Optional[str]
     return wf, key
 
 
+def _prune_workflows(current_time: Optional[float] = None) -> None:
+    """Remove expired workflows and enforce MAX_WORKFLOWS limit.
+
+    Extracted for unit testing and manual invocations outside the async
+    cleanup loop.
+    """
+    snapshot_ts = current_time if current_time is not None else time.time()
+
+    # Remove expired workflows (older than TTL)
+    expired_keys = [
+        key
+        for key, (_, timestamp) in WORKFLOWS.items()
+        if snapshot_ts - timestamp > WORKFLOW_TTL
+    ]
+    for key in expired_keys:
+        del WORKFLOWS[key]
+        if key in _WORKFLOW_LOCKS:
+            del _WORKFLOW_LOCKS[key]
+
+    # Enforce MAX_WORKFLOWS limit if configured
+    if MAX_WORKFLOWS is not None and len(WORKFLOWS) > MAX_WORKFLOWS:
+        sorted_workflows = sorted(WORKFLOWS.items(), key=lambda x: x[1][1])
+        num_to_evict = len(WORKFLOWS) - MAX_WORKFLOWS
+        for key, _ in sorted_workflows[:num_to_evict]:
+            del WORKFLOWS[key]
+            if key in _WORKFLOW_LOCKS:
+                del _WORKFLOW_LOCKS[key]
+
+
 def _evict_lru_workflow() -> None:
     """Evict the least-recently-used workflow when MAX_WORKFLOWS limit is exceeded."""
     if not WORKFLOWS:
@@ -146,32 +175,7 @@ async def _cleanup_workflows() -> None:
     while True:
         try:
             await asyncio.sleep(60)  # Run cleanup every minute
-            current_time = time.time()
-            
-            # Remove expired workflows (older than TTL)
-            expired_keys = [
-                key for key, (_, timestamp) in WORKFLOWS.items()
-                if current_time - timestamp > WORKFLOW_TTL
-            ]
-            for key in expired_keys:
-                del WORKFLOWS[key]
-                # Clean up corresponding lock entry
-                if key in _WORKFLOW_LOCKS:
-                    del _WORKFLOW_LOCKS[key]
-            
-            # Enforce MAX_WORKFLOWS limit if set
-            if MAX_WORKFLOWS is not None and len(WORKFLOWS) > MAX_WORKFLOWS:
-                # Sort by timestamp and evict oldest entries
-                sorted_workflows = sorted(
-                    WORKFLOWS.items(),
-                    key=lambda x: x[1][1]
-                )
-                num_to_evict = len(WORKFLOWS) - MAX_WORKFLOWS
-                for key, _ in sorted_workflows[:num_to_evict]:
-                    del WORKFLOWS[key]
-                    # Clean up corresponding lock entry
-                    if key in _WORKFLOW_LOCKS:
-                        del _WORKFLOW_LOCKS[key]
+            _prune_workflows()
         
         except asyncio.CancelledError:
             # Cleanup task was cancelled (shutdown)
@@ -181,10 +185,18 @@ async def _cleanup_workflows() -> None:
             print(f"Error in workflow cleanup: {e}")
 
 
+def _utcnow() -> datetime:
+    """Return a timezone-aware UTC timestamp."""
+    return datetime.now(timezone.utc)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Manage cleanup task lifecycle: start on startup, stop on shutdown."""
     global _cleanup_task
+    
+    # Ensure database tables exist before handling requests
+    Base.metadata.create_all(ENGINE)
     
     # Start cleanup task
     _cleanup_task = asyncio.create_task(_cleanup_workflows())
@@ -415,14 +427,14 @@ class Workflow(Base):
     id = Column(String, primary_key=True)
     name = Column(String)
     config = Column(Text)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=_utcnow)
 
 class Run(Base):
     __tablename__ = "runs"
     id = Column(String, primary_key=True)
     workflow_id = Column(String)
     status = Column(String)
-    started_at = Column(DateTime, default=datetime.utcnow)
+    started_at = Column(DateTime, default=_utcnow)
     completed_at = Column(DateTime, nullable=True)
     current_step = Column(String, nullable=True)
     entity_id = Column(String)
@@ -435,7 +447,7 @@ class AuditLog(Base):
     run_id = Column(String)
     type = Column(String)
     detail = Column(Text)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=_utcnow)
 
 ENGINE = create_engine("sqlite:///bridge.db")
 SessionLocal = sessionmaker(bind=ENGINE)
@@ -445,7 +457,7 @@ def _db_session():
 
 def _audit(run_id: str, type_: str, detail: Dict[str, Any]):
     with _db_session() as s:
-        a = AuditLog(id=uuid4().hex, run_id=run_id, type=type_, detail=json.dumps(detail), created_at=datetime.utcnow())
+        a = AuditLog(id=uuid4().hex, run_id=run_id, type=type_, detail=json.dumps(detail), created_at=_utcnow())
         s.add(a)
         s.commit()
 
@@ -453,7 +465,7 @@ def _ensure_workflow_row(entity_id: str, name: Optional[str] = None, config: Opt
     with _db_session() as s:
         w = s.get(Workflow, entity_id)
         if not w:
-            w = Workflow(id=entity_id, name=name or entity_id, config=json.dumps(config or {}), created_at=datetime.utcnow())
+            w = Workflow(id=entity_id, name=name or entity_id, config=json.dumps(config or {}), created_at=_utcnow())
             s.add(w)
             s.commit()
         return w
@@ -466,7 +478,7 @@ def _ensure_run_row(entity_id: str, conv_key: str) -> str:
             if r:
                 return run_id
         run_id = uuid4().hex
-        r = Run(id=run_id, workflow_id=entity_id, status="running", started_at=datetime.utcnow(), entity_id=entity_id, conv_key=conv_key)
+        r = Run(id=run_id, workflow_id=entity_id, status="running", started_at=_utcnow(), entity_id=entity_id, conv_key=conv_key)
         s.add(r)
         s.commit()
         CONV_RUNS[conv_key] = run_id
@@ -487,10 +499,6 @@ def _update_run_status(conv_key: str, status: str, current_step: Optional[str] =
         if error:
             r.last_error = error
         if completed:
-            r.completed_at = datetime.utcnow()
+            r.completed_at = _utcnow()
         s.commit()
     _audit(run_id, "status", {"status": status, "current_step": current_step or "", "error": error or ""})
-
-@app.on_event("startup")
-def _init_db():
-    Base.metadata.create_all(ENGINE)
