@@ -35,4 +35,4 @@ fi
 # Example:
 #   export PYTHONPATH="/path/to/agent-framework/python/packages/core"
 
-exec uvicorn bridge.bridge_server:app --host "$HOST" --port "$PORT" --reload
+exec uv run uvicorn bridge.bridge_server:app --host "$HOST" --port "$PORT" --reload

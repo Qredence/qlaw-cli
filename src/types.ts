@@ -64,11 +64,13 @@ export interface CustomCommand {
   command: string;
 }
 
-export type InputMode =
-  | "chat"
-  | "command"
-  | "mention"
-  | "settings-menu";
+export type InputMode = "chat" | "command" | "mention" | "settings-menu";
+
+export type UISuggestion = {
+  label: string;
+  description?: string;
+  kind: "command" | "custom-command" | "mention";
+};
 
 export type Prompt =
   | {
