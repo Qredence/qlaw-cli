@@ -22,7 +22,7 @@ from sqlalchemy import Column, String, DateTime, Text, create_engine, select
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 # Agent Framework imports (ensure installed/available in your Python env)
-from agent_framework import ChatMessage, Role
+from agent_framework import ChatMessage
 from agent_framework._workflows._handoff import HandoffUserInputRequest
 from agent_framework._workflows._events import (
     RequestInfoEvent,
