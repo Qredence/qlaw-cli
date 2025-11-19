@@ -101,7 +101,9 @@ export async function saveSettings(settings: AppSettings): Promise<void> {
   try {
     await ensureDataDir();
     const filePath = getStoragePath(STORAGE_KEY_SETTINGS);
-    await Bun.write(filePath, JSON.stringify(settings, null, 2));
+    // Use Node.js-compatible fs/promises for cross-runtime compatibility
+    const { writeFile } = await import("fs/promises");
+    await writeFile(filePath, JSON.stringify(settings, null, 2), "utf-8");
   } catch (e) {
     console.error("Failed to save settings:", e);
   }

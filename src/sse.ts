@@ -23,6 +23,108 @@ export interface SSEEventHandlers {
 }
 
 /**
+ * Process a single SSE event with the given payload
+ * Extracted to eliminate duplication between main loop and buffer cleanup
+ */
+function processSSEEvent(
+  currentEvent: string | null,
+  payload: any,
+  handlers: SSEEventHandlers
+): void {
+  // Handle trace.complete events (e.g., RequestInfoEvent)
+  if (currentEvent === "response.trace.complete" && handlers.onTraceComplete) {
+    try {
+      handlers.onTraceComplete(payload);
+    } catch (e: any) {
+      console.error("Error in onTraceComplete handler:", e);
+    }
+  }
+  // Handle trace.complete from payload type field
+  else if (payload?.type === "response.trace.complete" && handlers.onTraceComplete) {
+    try {
+      handlers.onTraceComplete(payload);
+    } catch (e: any) {
+      console.error("Error in onTraceComplete handler:", e);
+    }
+  }
+  // Handle error events
+  else if (currentEvent === "response.error" && handlers.onError) {
+    const msg =
+      payload?.error?.message || payload?.message || "Unknown error";
+    try {
+      handlers.onError(new Error(msg));
+    } catch (e: any) {
+      console.error("Error in onError handler:", e);
+    }
+  }
+  // Handle delta/text events
+  else if (
+    (currentEvent === "response.output_text.delta" ||
+      currentEvent === "message.delta" ||
+      currentEvent === "response.delta") &&
+    handlers.onDelta
+  ) {
+    const delta =
+      payload?.delta ??
+      payload?.text ??
+      payload?.content ??
+      payload?.output_text?.delta ??
+      "";
+    if (delta) {
+      try {
+        handlers.onDelta(delta);
+      } catch (e: any) {
+        console.error("Error in onDelta handler:", e);
+      }
+    }
+  }
+  // Handle completion signal
+  else if (currentEvent === "response.completed") {
+    // No action needed, just acknowledge
+  }
+  // Handle generic error type
+  else if (payload?.type === "error" && handlers.onError) {
+    try {
+      handlers.onError(new Error(payload.message || "Unknown error"));
+    } catch (e: any) {
+      console.error("Error in onError handler:", e);
+    }
+  }
+  // Handle response.output_text.delta from type field
+  else if (
+    payload?.type === "response.output_text.delta" &&
+    typeof payload.delta === "string" &&
+    handlers.onDelta
+  ) {
+    try {
+      handlers.onDelta(payload.delta);
+    } catch (e: any) {
+      console.error("Error in onDelta handler:", e);
+    }
+  }
+  // Fallback: if we see any payload with text, append
+  else if (payload && typeof payload === "object" && handlers.onDelta) {
+    const fallback =
+      payload?.delta ?? payload?.text ?? payload?.content;
+    if (typeof fallback === "string" && fallback) {
+      try {
+        handlers.onDelta(fallback);
+      } catch (e: any) {
+        console.error("Error in onDelta handler:", e);
+      }
+    }
+  }
+  // Generic event handler
+  if (handlers.onEvent) {
+    try {
+      handlers.onEvent(currentEvent, payload);
+    } catch (e: any) {
+      console.error("Error in onEvent handler:", e);
+    }
+  }
+}
+
+/**
  * Parse SSE stream from a ReadableStream reader
  * Handles buffer management, event/data line parsing, and delegates to handlers
  */
@@ -56,97 +158,10 @@ export async function parseSSEStream(
         }
         try {
           const payload = jsonStr ? JSON.parse(jsonStr) : null;
-          
-          // Handle trace.complete events (e.g., RequestInfoEvent)
-          if (currentEvent === "response.trace.complete" && handlers.onTraceComplete) {
-            try {
-              handlers.onTraceComplete(payload);
-            } catch (e: any) {
-              console.error("Error in onTraceComplete handler:", e);
-            }
-          }
-          // Handle trace.complete from payload type field
-          else if (payload?.type === "response.trace.complete" && handlers.onTraceComplete) {
-            try {
-              handlers.onTraceComplete(payload);
-            } catch (e: any) {
-              console.error("Error in onTraceComplete handler:", e);
-            }
-          }
-          // Handle error events
-          else if (currentEvent === "response.error" && handlers.onError) {
-            const msg =
-              payload?.error?.message || payload?.message || "Unknown error";
-            try {
-              handlers.onError(new Error(msg));
-            } catch (e: any) {
-              console.error("Error in onError handler:", e);
-            }
-          }
-          // Handle delta/text events
-          else if (
-            (currentEvent === "response.output_text.delta" ||
-              currentEvent === "message.delta" ||
-              currentEvent === "response.delta") &&
-            handlers.onDelta
-          ) {
-            const delta =
-              payload?.delta ??
-              payload?.text ??
-              payload?.content ??
-              payload?.output_text?.delta ??
-              "";
-            if (delta) {
-              try {
-                handlers.onDelta(delta);
-              } catch (e: any) {
-                console.error("Error in onDelta handler:", e);
-              }
-            }
-          }
-          // Handle completion signal
-          else if (currentEvent === "response.completed") {
+          processSSEEvent(currentEvent, payload, handlers);
+          // Reset currentEvent after completion signal
+          if (currentEvent === "response.completed") {
             currentEvent = null;
-          }
-          // Handle generic error type
-          else if (payload?.type === "error" && handlers.onError) {
-            try {
-              handlers.onError(new Error(payload.message || "Unknown error"));
-            } catch (e: any) {
-              console.error("Error in onError handler:", e);
-            }
-          }
-          // Handle response.output_text.delta from type field
-          else if (
-            payload?.type === "response.output_text.delta" &&
-            typeof payload.delta === "string" &&
-            handlers.onDelta
-          ) {
-            try {
-              handlers.onDelta(payload.delta);
-            } catch (e: any) {
-              console.error("Error in onDelta handler:", e);
-            }
-          }
-          // Fallback: if we see any payload with text, append
-          else if (payload && typeof payload === "object" && handlers.onDelta) {
-            const fallback =
-              payload?.delta ?? payload?.text ?? payload?.content;
-            if (typeof fallback === "string" && fallback) {
-              try {
-                handlers.onDelta(fallback);
-              } catch (e: any) {
-                console.error("Error in onDelta handler:", e);
-              }
-            }
-          }
-          // Generic event handler
-          if (handlers.onEvent) {
-            try {
-              handlers.onEvent(currentEvent, payload);
-            } catch (e: any) {
-              console.error("Error in onEvent handler:", e);
-            }
           }
         } catch (e: any) {
           // Ignore parse errors for keep-alive/comment lines
@@ -173,97 +188,10 @@ export async function parseSSEStream(
         }
         try {
           const payload = jsonStr ? JSON.parse(jsonStr) : null;
-          
-          // Handle trace.complete events (e.g., RequestInfoEvent)
-          if (currentEvent === "response.trace.complete" && handlers.onTraceComplete) {
-            try {
-              handlers.onTraceComplete(payload);
-            } catch (e: any) {
-              console.error("Error in onTraceComplete handler:", e);
-            }
-          }
-          // Handle trace.complete from payload type field
-          else if (payload?.type === "response.trace.complete" && handlers.onTraceComplete) {
-            try {
-              handlers.onTraceComplete(payload);
-            } catch (e: any) {
-              console.error("Error in onTraceComplete handler:", e);
-            }
-          }
-          // Handle error events
-          else if (currentEvent === "response.error" && handlers.onError) {
-            const msg =
-              payload?.error?.message || payload?.message || "Unknown error";
-            try {
-              handlers.onError(new Error(msg));
-            } catch (e: any) {
-              console.error("Error in onError handler:", e);
-            }
-          }
-          // Handle delta/text events
-          else if (
-            (currentEvent === "response.output_text.delta" ||
-              currentEvent === "message.delta" ||
-              currentEvent === "response.delta") &&
-            handlers.onDelta
-          ) {
-            const delta =
-              payload?.delta ??
-              payload?.text ??
-              payload?.content ??
-              payload?.output_text?.delta ??
-              "";
-            if (delta) {
-              try {
-                handlers.onDelta(delta);
-              } catch (e: any) {
-                console.error("Error in onDelta handler:", e);
-              }
-            }
-          }
-          // Handle completion signal
-          else if (currentEvent === "response.completed") {
+          processSSEEvent(currentEvent, payload, handlers);
+          // Reset currentEvent after completion signal
+          if (currentEvent === "response.completed") {
             currentEvent = null;
-          }
-          // Handle generic error type
-          else if (payload?.type === "error" && handlers.onError) {
-            try {
-              handlers.onError(new Error(payload.message || "Unknown error"));
-            } catch (e: any) {
-              console.error("Error in onError handler:", e);
-            }
-          }
-          // Handle response.output_text.delta from type field
-          else if (
-            payload?.type === "response.output_text.delta" &&
-            typeof payload.delta === "string" &&
-            handlers.onDelta
-          ) {
-            try {
-              handlers.onDelta(payload.delta);
-            } catch (e: any) {
-              console.error("Error in onDelta handler:", e);
-            }
-          }
-          // Fallback: if we see any payload with text, append
-          else if (payload && typeof payload === "object" && handlers.onDelta) {
-            const fallback =
-              payload?.delta ?? payload?.text ?? payload?.content;
-            if (typeof fallback === "string" && fallback) {
-              try {
-                handlers.onDelta(fallback);
-              } catch (e: any) {
-                console.error("Error in onDelta handler:", e);
-              }
-            }
-          }
-          // Generic event handler
-          if (handlers.onEvent) {
-            try {
-              handlers.onEvent(currentEvent, payload);
-            } catch (e: any) {
-              console.error("Error in onEvent handler:", e);
-            }
           }
         } catch (e: any) {
           // Ignore parse errors for keep-alive/comment lines
