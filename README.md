@@ -1,7 +1,7 @@
 # qlaw-cli
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Version](https://img.shields.io/badge/version-0.1.3-blue.svg)](https://github.com/Qredence/qlaw-cli/releases)
+[![Version](https://img.shields.io/badge/version-0.1.4-blue.svg)](https://github.com/Qredence/qlaw-cli/releases)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 [![Built with Bun](https://img.shields.io/badge/Built%20with-Bun-f472b6.svg)](https://bun.sh)
 [![Code of Conduct](https://img.shields.io/badge/Code%20of-Conduct-blueviolet.svg)](CODE_OF_CONDUCT.md)
@@ -146,6 +146,7 @@ Type `@` for contextual references:
 - `@docs <topic>` - Reference documentation in your message
 
 Mentions are automatically formatted to provide structured context to the AI. For example:
+
 - `@docs API authentication` will format as a documentation reference
 - `@file src/index.ts` will format as a file reference
 - `@code function example() { return true; }` will format as a code snippet
@@ -165,8 +166,8 @@ Mentions are automatically formatted to provide structured context to the AI. Fo
 - **[UI Reference](./docs/UI-REFERENCE.md)** - Visual interface guide
 - **[Design System](./docs/DESIGN.md)** - Colors, typography, and components
 - **[Changelog](./docs/CHANGELOG.md)** - Version history
- - **[API Integration](./docs/API-INTEGRATION.md)** - Configure OpenAI/Azure/custom backends
- - **[Agent Bridge Example](./bridge/README.md)** - Python Agent Framework bridge used by AF modes
+- **[API Integration](./docs/API-INTEGRATION.md)** - Configure OpenAI/Azure/custom backends
+- **[Agent Bridge Example](./bridge/README.md)** - Python Agent Framework bridge used by AF modes
 
 ## 🗺️ Roadmap
 
@@ -175,12 +176,14 @@ Mentions are automatically formatted to provide structured context to the AI. Fo
 The next release will focus on the following key areas:
 
 #### 🎯 Enhanced Interactivity
+
 - [x] Improved command autocomplete and suggestions
 - [x] Interactive prompts and confirmations
 - [x] Enhanced keyboard navigation and shortcuts
 - [x] Real-time feedback and visual indicators
 
 #### ⚙️ Settings Implementation
+
 - [x] Comprehensive settings panel
 - [x] User preferences persistence
 - [x] Configurable themes and colors
@@ -188,6 +191,7 @@ The next release will focus on the following key areas:
 - [x] Custom keybindings
 
 #### 🤖 Agent Framework Integration
+
 - [ ] Native integration of agent-framework as core framework
 - [ ] Native integration of agentic-fleet as core framework
 - [ ] Seamless agent orchestration and management
@@ -195,6 +199,7 @@ The next release will focus on the following key areas:
 - [ ] Agent capability discovery
 
 #### ✨ User Experience Improvements
+
 - [ ] Streamlined onboarding flow
 - [ ] Enhanced error messages and help system
 - [ ] Performance optimizations

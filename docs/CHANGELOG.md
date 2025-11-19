@@ -16,6 +16,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - File attachment support
 - Session management improvements
 
+## [0.1.4] - 2025-11-19
+
+### Added
+
+- Workflow mode with Agent Framework handoff support, streaming via the new bridge backend
+- Dedicated Agent Framework settings in the overlay plus `/mode`, `/workflow`, `/agents`, `/run`, `/continue`, `/judge`, `/af-bridge`, and `/af-model` commands
+- Python FastAPI bridge (`bridge/bridge_server.py`) that exposes OpenAI-compatible SSE endpoints for multi-tier workflows
+
+### Changed
+
+- Request routing now automatically targets the bridge whenever workflow mode is enabled and AF settings are configured
+- Status line, prompts, and message rendering surface workflow state, agent trace summaries, and bridge readiness cues
+
+### Fixed
+
+- Hardened SSE parsing to avoid dropping trace events when the stream flushes trailing bytes
+- Storage layer now honors custom data directories and consistently persists workflow artifacts
+
+### Docs
+
+- Added `AGENTS.md`, `docs/API-INTEGRATION.md`, and bridge runbooks covering Agent Framework setup and CLI wiring
+
 ## [0.1.3] - 2025-11-09
 
 ### Added
@@ -114,7 +136,8 @@ Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for details.
 
 ---
 
-[Unreleased]: https://github.com/qredence/qlaw-cli/compare/v0.1.3...HEAD
+[Unreleased]: https://github.com/qredence/qlaw-cli/compare/v0.1.4...HEAD
+[0.1.4]: https://github.com/qredence/qlaw-cli/releases/tag/v0.1.4
 [0.1.3]: https://github.com/qredence/qlaw-cli/releases/tag/v0.1.3
 [0.1.0]: https://github.com/qredence/qlaw-cli/releases/tag/v0.1.0
 [0.0.1]: https://github.com/qredence/qlaw-cli/releases/tag/v0.0.1
