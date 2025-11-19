@@ -23,14 +23,14 @@ export function initTheme() {
 
 export function initListbox(root: HTMLElement) {
   const items = Array.from(root.querySelectorAll<HTMLElement>("[data-af-option]"));
-  let index = 0;
+  let selectedIndex = 0;
   const select = (i: number) => {
-    index = (i + items.length) % items.length;
+    selectedIndex = (i + items.length) % items.length;
     items.forEach((el, n) => {
-      const sel = n === index;
-      el.setAttribute("aria-selected", sel ? "true" : "false");
-      el.tabIndex = sel ? 0 : -1;
-      if (sel) {
+      const isSelected = n === selectedIndex;
+      el.setAttribute("aria-selected", isSelected ? "true" : "false");
+      el.tabIndex = isSelected ? 0 : -1;
+      if (isSelected) {
         el.classList.add("af-selected");
         try { el.scrollIntoView({ block: "nearest", behavior: "smooth" }); } catch {}
         el.focus();
@@ -42,20 +42,20 @@ export function initListbox(root: HTMLElement) {
   root.setAttribute("role", "listbox");
   items.forEach(el => el.setAttribute("role", "option"));
   select(0);
-  root.addEventListener("keydown", (e: any) => {
+  root.addEventListener("keydown", (e: KeyboardEvent) => {
     const k = e.key?.toLowerCase();
-    if (k === "arrowdown") { e.preventDefault?.(); select(index + 1); }
-    else if (k === "arrowup") { e.preventDefault?.(); select(index - 1); }
+    if (k === "arrowdown") { e.preventDefault?.(); select(selectedIndex + 1); }
+    else if (k === "arrowup") { e.preventDefault?.(); select(selectedIndex - 1); }
     else if (k === "enter") {
       e.preventDefault?.();
-      const el = items[index];
+      const el = items[selectedIndex];
       if (!el) return;
-      const ev = new CustomEvent("af-select", { detail: { index, value: el.getAttribute("data-af-value") } });
+      const ev = new CustomEvent("af-select", { detail: { index: selectedIndex, value: el.getAttribute("data-af-value") } });
       root.dispatchEvent(ev);
       el.click?.();
     }
   });
-  return { getIndex: () => index, select };
+  return { getIndex: () => selectedIndex, select };
 }
 
 export type ValidationSchema = Record<string, { type: "string" | "number" | "boolean"; required?: boolean; min?: number; max?: number }>;
@@ -63,20 +63,20 @@ export type ValidationSchema = Record<string, { type: "string" | "number" | "boo
 export function validateAgentParams(values: Record<string, any>, schema: ValidationSchema) {
   const errors: Record<string, string> = {};
   Object.keys(schema).forEach(key => {
-    const s = schema[key];
-    if (!s) return;
-    const v = values[key];
-    if (s.required && (v === undefined || v === null || v === "")) errors[key] = "required";
-    if (v !== undefined && v !== null) {
-      if (s.type === "number") {
-        const n = Number(v);
+    const schemaField = schema[key];
+    if (!schemaField) return;
+    const value = values[key];
+    if (schemaField.required && (value === undefined || value === null || value === "")) errors[key] = "required";
+    if (value !== undefined && value !== null) {
+      if (schemaField.type === "number") {
+        const n = Number(value);
         if (Number.isNaN(n)) errors[key] = "type";
-        if (s.min !== undefined && n < s.min) errors[key] = "min";
-        if (s.max !== undefined && n > s.max) errors[key] = "max";
-      } else if (s.type === "boolean") {
-        if (!(v === true || v === false)) errors[key] = "type";
-      } else if (s.type === "string") {
-        if (typeof v !== "string") errors[key] = "type";
+        if (schemaField.min !== undefined && n < schemaField.min) errors[key] = "min";
+        if (schemaField.max !== undefined && n > schemaField.max) errors[key] = "max";
+      } else if (schemaField.type === "boolean") {
+        if (!(value === true || value === false)) errors[key] = "type";
+      } else if (schemaField.type === "string") {
+        if (typeof value !== "string") errors[key] = "type";
       }
     }
   });
