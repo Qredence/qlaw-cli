@@ -7,6 +7,7 @@ This guide explains how to publish `qlaw-cli` to npm using **npm Trusted Publish
 This repository uses **npm Trusted Publishing**, a modern, secure approach that eliminates the need for long-lived npm tokens. Instead, GitHub Actions uses OIDC (OpenID Connect) to authenticate with npm automatically during workflow runs.
 
 ### Benefits
+
 - ✅ No npm tokens to manage or rotate
 - ✅ Cryptographically signed, short-lived credentials
 - ✅ Reduced risk of credential leakage
@@ -20,6 +21,7 @@ Before you can publish the package, you need to configure npm Trusted Publishing
 ### Setting Up Trusted Publishing on npm
 
 1. **Ensure the package exists on npm** (for first-time setup)
+
    - If `qlaw-cli` doesn't exist yet, you'll need to do an initial manual publish with your npm account:
      ```bash
      npm login
@@ -28,6 +30,7 @@ Before you can publish the package, you need to configure npm Trusted Publishing
    - Alternatively, create the package on npmjs.com without publishing
 
 2. **Configure Trusted Publisher on npmjs.com**
+
    - Log in to [npmjs.com](https://www.npmjs.com/)
    - Go to your package page: https://www.npmjs.com/package/qlaw-cli
    - Click on **Settings** tab
@@ -45,8 +48,8 @@ Before you can publish the package, you need to configure npm Trusted Publishing
    - The workflow file already has the correct permissions:
      ```yaml
      permissions:
-       id-token: write  # Enable OIDC authentication
-       contents: write  # Create releases/tags
+       id-token: write # Enable OIDC authentication
+       contents: write # Create releases/tags
      ```
    - The publish command already includes `--provenance` and `--access public` flags
 
@@ -61,11 +64,13 @@ Once trusted publishing is configured on npmjs.com, the workflow will automatica
 ### Automatic Publishing
 
 1. Update the version in `package.json`:
+
    ```bash
    npm version patch  # or minor, or major
    ```
 
 2. Commit and push to main:
+
    ```bash
    git add package.json
    git commit -m "chore: bump version to X.Y.Z"
@@ -129,24 +134,40 @@ No npm token is stored in GitHub Secrets - authentication happens automatically 
 **Cause**: Trusted publishing is not configured on npmjs.com
 
 **Solution**:
+
 1. Verify you've added the trusted publisher configuration on npmjs.com
 2. Double-check the repository name, organization, and workflow filename match exactly
 3. Ensure `id-token: write` permission is set in the workflow (it already is)
 
 ### Error: "Not found - 'qlaw-cli@X.Y.Z' is not in this registry"
 
-**Cause**: Package doesn't exist yet on npm
+This error shows up in two scenarios:
 
-**Solution**:
-1. Do an initial manual publish: `npm publish --access public`
-2. OR create the package on npmjs.com first
-3. Then configure trusted publishing
+1. **Package truly does not exist yet** – npm is telling you it has never seen `qlaw-cli` before.
+2. **Trusted Publishing is not wired up for this package** – npm deliberately responds with 404 for untrusted identities, even if the package exists (as a privacy safeguard).
+
+**Fix when the package is new:**
+
+1. Do an initial manual publish from a logged-in npm account: `npm publish --access public`
+2. OR create the package shell on npmjs.com first
+3. Then enable trusted publishing so GitHub can take over
+
+**Fix when the package already exists but the workflow still sees 404:**
+
+1. On npmjs.com go to **Package → Settings → Trusted Publishers**
+2. Add a GitHub Actions trusted publisher with:
+   - Organization/user: `Qredence`
+   - Repository: `qlaw-cli`
+   - Workflow filename: `publish.yml`
+   - (Optional) Environment: `release`
+3. Save the configuration, then rerun the workflow. npm will now issue the provenance-aware token and the publish will succeed.
 
 ### Error: "You do not have permission to publish"
 
 **Cause**: The GitHub repository/workflow doesn't match the trusted publisher configuration
 
 **Solution**:
+
 1. Verify the trusted publisher settings on npmjs.com
 2. Check that organization name is `Qredence` (exact match, case-sensitive)
 3. Check that repository name is `qlaw-cli` (exact match)
@@ -164,6 +185,7 @@ No npm token is stored in GitHub Secrets - authentication happens automatically 
 ### Provenance Attestation
 
 Every package published via this workflow includes a provenance attestation that proves:
+
 - Which GitHub repository published it
 - Which workflow file was used
 - The exact commit SHA
@@ -171,6 +193,7 @@ Every package published via this workflow includes a provenance attestation that
 - The build environment details
 
 Users can verify authenticity with:
+
 ```bash
 npm audit signatures
 ```
@@ -185,6 +208,7 @@ npm audit signatures
 ### Supply Chain Protection
 
 The `--provenance` flag ensures transparency in the software supply chain by:
+
 - Recording where the package was built
 - Linking the package to its source code
 - Enabling verification of package authenticity
@@ -199,6 +223,7 @@ Follow [Semantic Versioning](https://semver.org/):
 - **PATCH**: Bug fixes (e.g., 0.1.2 → 0.1.3)
 
 Use npm version commands:
+
 ```bash
 npm version patch  # 0.1.2 → 0.1.3
 npm version minor  # 0.1.2 → 0.2.0
@@ -211,4 +236,3 @@ npm version major  # 0.1.2 → 1.0.0
 - [npm Provenance Statements](https://docs.npmjs.com/generating-provenance-statements)
 - [GitHub OIDC Documentation](https://docs.github.com/en/actions/deployment/security-hardening-your-deployments/about-security-hardening-with-openid-connect)
 - [npm Security Best Practices](https://docs.npmjs.com/security)
-
