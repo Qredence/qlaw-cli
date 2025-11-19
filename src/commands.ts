@@ -10,7 +10,20 @@ export type BuiltInCommandName =
   | "export"
   | "theme"
   | "endpoint"
-  | "api-key";
+  | "api-key"
+  | "af-bridge"
+  | "af-model"
+  | "keybindings"
+  | "exit"
+  | "quit"
+  | "pwd"
+  | "cwd"
+  | "mode"
+  | "workflow"
+  | "agents"
+  | "run"
+  | "continue"
+  | "judge";
 
 export interface CommandMeta {
   name: BuiltInCommandName;
@@ -31,6 +44,19 @@ export const BUILT_IN_COMMANDS: CommandMeta[] = [
   { name: "theme", description: "Toggle theme", keywords: ["dark", "light"] },
   { name: "endpoint", description: "Set the API endpoint base URL", keywords: ["openai", "azure", "url"] },
   { name: "api-key", description: "Set the API key (masked)", keywords: ["token", "auth"] },
+  { name: "af-bridge", description: "Set Agent Framework bridge URL", keywords: ["workflow", "bridge"] },
+  { name: "af-model", description: "Set Agent Framework model", keywords: ["fleet", "agents"] },
+  { name: "keybindings", description: "View or edit suggestion keybindings", keywords: ["keys", "bindings"] },
+  { name: "exit", description: "Exit the CLI", keywords: ["quit"] },
+  { name: "quit", description: "Exit the CLI", keywords: ["exit"] },
+  { name: "pwd", description: "Show current directory", keywords: ["cwd"] },
+  { name: "cwd", description: "Change working directory", keywords: ["chdir"] },
+  { name: "mode", description: "Switch between standard and workflow modes", keywords: ["toggle", "workflow"] },
+  { name: "workflow", description: "Open workflow controls", keywords: ["pipeline", "agents"] },
+  { name: "agents", description: "Show configured agents", keywords: ["coder", "planner", "reviewer", "judge"] },
+  { name: "run", description: "Run the current workflow", keywords: ["start"] },
+  { name: "continue", description: "Continue an existing workflow", keywords: ["resume"] },
+  { name: "judge", description: "Invoke the judge agent", keywords: ["decision"] },
 ];
 
 export function getBuiltInCommandNames(): string[] {
@@ -43,13 +69,17 @@ export function getBuiltInDescription(name: string): string | undefined {
 }
 
 export interface MentionMeta {
-  name: "context" | "file" | "code" | "docs";
+  name: "context" | "file" | "code" | "docs" | "coder" | "planner" | "reviewer" | "judge";
   description: string;
 }
 
 export const MENTIONS: MentionMeta[] = [
-  { name: "context", description: "Add context" },
-  { name: "file", description: "Reference file" },
-  { name: "code", description: "Code snippet" },
-  { name: "docs", description: "Documentation" },
+  { name: "context", description: "Add context to your message" },
+  { name: "file", description: "Reference a file (e.g., @file path/to/file)" },
+  { name: "code", description: "Include a code snippet (e.g., @code your code here)" },
+  { name: "docs", description: "Reference documentation (e.g., @docs topic)" },
+  { name: "coder", description: "Route prompt to the Coder agent" },
+  { name: "planner", description: "Route prompt to the Planner agent" },
+  { name: "reviewer", description: "Route prompt to the Reviewer agent" },
+  { name: "judge", description: "Route prompt to the Judge agent" },
 ];

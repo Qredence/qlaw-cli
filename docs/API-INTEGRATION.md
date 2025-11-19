@@ -7,6 +7,7 @@ This guide shows how to integrate qlaw-cli with various AI services and backends
 - [OpenAI](#openai)
 - [Azure OpenAI](#azure-openai)
 - [Custom Backends](#custom-backends)
+- [Agent Framework Bridge](#agent-framework-bridge)
 - [Popular AI Services](#popular-ai-services)
 - [Environment Variables](#environment-variables)
 
@@ -115,6 +116,42 @@ OPENAI_BASE_URL=http://localhost:1234/v1
 OPENAI_API_KEY=lm-studio
 OPENAI_MODEL=local-model
 ```
+
+---
+
+## Agent Framework Bridge
+
+qlaw-cli can also talk to a Python Agent Framework bridge that exposes an OpenAI Responses-compatible SSE API. This is useful when you want multi-agent handoff workflows while keeping qlaw-cli as the human-facing console.
+
+### 1. Start the bridge
+
+See `bridge/README.md` for full details. Typical dev flow:
+
+```bash
+# from repo root
+uv pip install -r bridge/requirements.txt
+export OPENAI_BASE_URL="https://api.openai.com/v1"
+export OPENAI_API_KEY=sk-...
+export OPENAI_MODEL=gpt-4o-mini
+bun run bridge   # runs ./bridge/run.sh -> uvicorn bridge.bridge_server:app
+```
+
+### 2. Point qlaw-cli at the bridge
+
+Set Agent Framework env vars so the CLI speaks to the bridge instead of OpenAI directly:
+
+```bash
+export AF_BRIDGE_BASE_URL="http://127.0.0.1:8081"
+export AF_MODEL="multi_tier_support"   # matches the Agent Framework workflow name
+
+# run CLI with AF wiring
+bun run cli:af
+```
+
+Under the hood, the bridge:
+- Runs a multi-tier Agent Framework handoff workflow.
+- Streams `response.output_text.delta` events for final text.
+- Emits `response.trace.complete` events with `trace_type: "workflow_info"` for `RequestInfoEvent`s, which qlaw-cli parses via `src/af.ts` to drive interactive handoff prompts.
 
 ---
 

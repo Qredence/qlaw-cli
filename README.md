@@ -110,21 +110,45 @@ Type `/` to see available commands:
 - `/endpoint` - Set the API endpoint base URL
 - `/api-key` - Set the API key (masked in status)
 - `/status` - Show current configuration
-- `/settings` - Open settings menu
+- `/settings` - Print current settings summary
+- `/settings panel` - Open the interactive settings menu
 - `/sessions` - View recent sessions
 - `/commands` - List custom commands
 - `/export` - Export current chat to JSON
 - `/theme` - Toggle light/dark theme
 - `/terminal-setup` - Terminal keybinding tips
+- `/keybindings` - Inspect or edit suggestion navigation shortcuts
+- `/mode` - Switch between standard/workflow modes
+- `/workflow` - Workflow controls reference
+- `/agents` - Show current agent-fleet roles
+- `/run` - Kick off the workflow in the active mode
+- `/continue` - Continue a workflow handoff
+- `/judge` - Invoke the judge agent for a decision
+- `/af-bridge` - Configure the Agent Framework bridge base URL
+- `/af-model` - Configure the Agent Framework model identifier
+
+### Settings Panel
+
+- Run `/settings panel` to open the interactive settings overlay (Core API, UI, Agent Framework sections)
+- Run `/settings` alone to print the current configuration in the transcript
+- Use `↑` `↓` or `Tab` to highlight a row, `Enter` to edit/toggle, and `Esc` to close
+- Text fields launch inline prompts; updates persist to `~/.qlaw-cli/qlaw_settings.json`
+- Agent Framework rows mirror `/af-bridge` + `/af-model`, and workflow mode can stay enabled by default
+- Update suggestion navigation shortcuts with `/keybindings set <action> <binding>` or `/keybindings reset`
 
 ### Mentions
 
 Type `@` for contextual references:
 
-- `@context` - Add contextual information
-- `@file` - Reference a file
-- `@code` - Insert code snippet
-- `@docs` - Link documentation
+- `@context <text>` - Add contextual information to your message
+- `@file <path>` - Reference a file in your message
+- `@code <snippet>` - Include a code snippet in your message
+- `@docs <topic>` - Reference documentation in your message
+
+Mentions are automatically formatted to provide structured context to the AI. For example:
+- `@docs API authentication` will format as a documentation reference
+- `@file src/index.ts` will format as a file reference
+- `@code function example() { return true; }` will format as a code snippet
 
 ### Keyboard Shortcuts
 
@@ -141,6 +165,8 @@ Type `@` for contextual references:
 - **[UI Reference](./docs/UI-REFERENCE.md)** - Visual interface guide
 - **[Design System](./docs/DESIGN.md)** - Colors, typography, and components
 - **[Changelog](./docs/CHANGELOG.md)** - Version history
+ - **[API Integration](./docs/API-INTEGRATION.md)** - Configure OpenAI/Azure/custom backends
+ - **[Agent Bridge Example](./bridge/README.md)** - Python Agent Framework bridge used by AF modes
 
 ## 🗺️ Roadmap
 
@@ -155,11 +181,11 @@ The next release will focus on the following key areas:
 - [x] Real-time feedback and visual indicators
 
 #### ⚙️ Settings Implementation
-- [ ] Comprehensive settings panel
+- [x] Comprehensive settings panel
 - [x] User preferences persistence
 - [x] Configurable themes and colors
 - [x] API configuration management
-- [ ] Custom keybindings
+- [x] Custom keybindings
 
 #### 🤖 Agent Framework Integration
 - [ ] Native integration of agent-framework as core framework

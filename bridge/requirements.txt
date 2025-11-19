@@ -1,0 +1,11 @@
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+agent-framework
+httpx>=0.24.0
+pydantic>=2.7.0
+PyYAML>=6.0
+SQLAlchemy>=2.0
+
+# Agent Framework must be importable in your Python env
+# Option 1: pip install your local agent-framework package (editable) if available
+# Option 2: set PYTHONPATH to the directory containing the 'agent_framework' package

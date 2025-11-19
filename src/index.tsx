@@ -10,85 +10,77 @@ import {
   getBuiltInDescription,
   MENTIONS,
 } from "./commands.ts";
-
-interface Message {
-  id: string;
-  role: "user" | "assistant" | "system";
-  content: string;
-  timestamp: Date;
-}
-
-interface Session {
-  id: string;
-  name: string;
-  messages: Message[];
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-type ThemeName = "dark" | "light";
-
-type Action = "nextSuggestion" | "prevSuggestion" | "autocomplete";
-
-interface KeySpec {
-  name: string; // e.g. "up", "down", "tab", "k"
-  ctrl?: boolean;
-  alt?: boolean;
-  shift?: boolean;
-}
-
-interface AppSettings {
-  apiKey?: string;
-  endpoint?: string;
-  model?: string;
-  theme: ThemeName;
-  showTimestamps: boolean;
-  autoScroll: boolean;
-  version: number;
-  keybindings: Record<Action, KeySpec[]>;
-}
-
-interface CustomCommand {
-  id: string;
-  name: string;
-  description: string;
-  command: string;
-}
-
-// --- OpenAI Responses API (streaming) integration ---
-const OPENAI_BASE_URL = process.env.OPENAI_BASE_URL;
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-const OPENAI_MODEL = process.env.OPENAI_MODEL;
-
-function getAuthHeader(
-  baseUrl: string | undefined,
-  apiKey: string
-): Record<string, string> {
-  // Use Azure-compatible header if the base URL looks like Azure; otherwise standard Bearer
-  if (
-    baseUrl &&
-    (baseUrl.includes("azure.com") || baseUrl.includes("/openai/"))
-  ) {
-    return { "api-key": apiKey };
-  }
-  return { Authorization: `Bearer ${apiKey}` };
-}
-
-// Build a plain-text prompt from history for broad compatibility with proxies
-function buildResponsesInput(history: Message[]) {
-  const lines: string[] = [];
-  for (const m of history) {
-    const role =
-      m.role === "assistant"
-        ? "Assistant"
-        : m.role === "system"
-        ? "System"
-        : "User";
-    lines.push(`${role}: ${m.content}`);
-  }
-  lines.push("Assistant:");
-  return lines.join("\n\n");
-}
+import type {
+  Message,
+  Session,
+  AppSettings,
+  CustomCommand,
+  KeySpec,
+  ThemeName,
+  Action,
+  InputMode,
+  Prompt,
+  UISuggestion,
+} from "./types.ts";
+import {
+  loadSettings,
+  saveSettings,
+  loadSessions,
+  saveSessions,
+  loadCustomCommands,
+  saveCustomCommands,
+  defaultSettings,
+  defaultKeybindings,
+} from "./storage.ts";
+import {
+  OPENAI_BASE_URL,
+  OPENAI_API_KEY,
+  OPENAI_MODEL,
+  AF_BRIDGE_BASE_URL,
+  AF_MODEL,
+  getAuthHeader,
+  buildResponsesInput,
+} from "./api.ts";
+import { parseSSEStream } from "./sse.ts";
+import { formatRequestInfoForDisplay } from "./af.ts";
+import {
+  handleClearCommand,
+  handleHelpCommand,
+  handleModelCommand,
+  handleEndpointCommand,
+  handleApiKeyCommand,
+  handleSettingsCommand,
+  handleSessionsCommand,
+  handleStatusCommand,
+  handleTerminalSetupCommand,
+  handleCommandsCommand,
+  handleThemeCommand,
+  handleExportCommand,
+  handleExitCommand,
+  handlePwdCommand,
+  handleCwdCommand,
+  handleUnknownCommand,
+  handleModeCommand,
+  handleWorkflowCommand,
+  handleAgentsCommand,
+  handleRunCommand,
+  handleContinueCommand,
+  handleJudgeCommand,
+  handleAfBridgeCommand,
+  handleAfModelCommand,
+  handleKeybindingsCommand,
+  type CommandContext,
+} from "./commandHandlers.ts";
+import { formatMessageWithMentions } from "./mentionHandlers.ts";
+import { createStdoutWithDimensions } from "./utils.ts";
+import { startWorkflow } from "./workflow.ts";
+import { SessionList } from "./components/SessionList.tsx";
+import { SettingsMenu } from "./components/SettingsMenu.tsx";
+import { Header } from "./components/Header.tsx";
+import { MessageList } from "./components/MessageList.tsx";
+import { InputArea } from "./components/InputArea.tsx";
+import { WelcomeScreen } from "./components/WelcomeScreen.tsx";
+import { SuggestionList } from "./components/SuggestionList.tsx";
 
 async function streamResponseFromOpenAI(params: {
   history: Message[];
@@ -132,69 +124,16 @@ async function streamResponseFromOpenAI(params: {
     }
 
     const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-
-    let buf = "";
-    let currentEvent: string | null = null;
-
-    // SSE parsing: events separated by blank lines; each event has optional "event:" and one or more "data:" lines
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buf += decoder.decode(value, { stream: true });
-
-      // Split by lines and process whenever we hit a blank line
-      const parts = buf.split(/\r?\n/);
-      // Keep the last partial line in buffer
-      buf = parts.pop() || "";
-
-      for (const line of parts) {
-        if (line.startsWith("event:")) {
-          currentEvent = line.slice(6).trim();
-        } else if (line.startsWith("data:")) {
-          const jsonStr = line.slice(5).trim();
-          if (jsonStr === "[DONE]") {
-            currentEvent = null;
-            continue;
-          }
-          try {
-            const payload = jsonStr ? JSON.parse(jsonStr) : null;
-            // Handle common Responses API streaming events
-            // Prefer output_text.delta/ message delta styles
-            if (
-              currentEvent === "response.output_text.delta" ||
-              currentEvent === "message.delta" ||
-              currentEvent === "response.delta"
-            ) {
-              const delta =
-                payload?.delta ??
-                payload?.text ??
-                payload?.content ??
-                payload?.output_text?.delta ??
-                "";
-              if (delta) onDelta(delta);
-            } else if (currentEvent === "response.error") {
-              const msg =
-                payload?.error?.message || payload?.message || "Unknown error";
-              throw new Error(msg);
-            } else if (currentEvent === "response.completed") {
-              // completion signal
-              currentEvent = null;
-            } else if (payload && typeof payload === "object") {
-              // Fallback: if we see any payload with text, append
-              const fallback =
-                payload?.delta ?? payload?.text ?? payload?.content;
-              if (typeof fallback === "string" && fallback) onDelta(fallback);
-            }
-          } catch (e: any) {
-            // Ignore parse errors for keep-alive/comment lines
-          }
-        } else if (line.trim() === "") {
-          // End of event
-          currentEvent = null;
+    await parseSSEStream(reader, {
+      onDelta,
+      onError,
+      onTraceComplete: (payload) => {
+        const formatted = formatRequestInfoForDisplay(payload);
+        if (formatted) {
+          onDelta(formatted);
         }
-      }
-    }
+      },
+    });
 
     onDone();
   } catch (err: any) {
@@ -203,124 +142,8 @@ async function streamResponseFromOpenAI(params: {
   }
 }
 
-type InputMode =
-  | "chat"
-  | "command"
-  | "mention"
-  | "model-input"
-  | "settings-menu";
-
-const STORAGE_KEY_SETTINGS = "qlaw_settings";
-const STORAGE_KEY_SESSIONS = "qlaw_sessions";
-const STORAGE_KEY_COMMANDS = "qlaw_custom_commands";
-
-const defaultKeybindings: Record<Action, KeySpec[]> = {
-  nextSuggestion: [{ name: "down" }],
-  prevSuggestion: [{ name: "up" }],
-  autocomplete: [{ name: "tab" }],
-};
-
-// Helper functions for localStorage
-function loadSettings(): AppSettings {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY_SETTINGS);
-    if (stored) {
-      const parsed = JSON.parse(stored);
-      return {
-        ...defaultSettings,
-        ...parsed,
-        keybindings: parsed.keybindings || defaultKeybindings,
-        version: 1,
-      };
-    }
-  } catch (e) {
-    console.error("Failed to load settings:", e);
-  }
-  return defaultSettings;
-}
-
-function saveSettings(settings: AppSettings) {
-  try {
-    localStorage.setItem(STORAGE_KEY_SETTINGS, JSON.stringify(settings));
-  } catch (e) {
-    console.error("Failed to save settings:", e);
-  }
-}
-
-function loadSessions(): Session[] {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY_SESSIONS);
-    if (stored) {
-      return JSON.parse(stored, (key, value) => {
-        if (key === "createdAt" || key === "updatedAt" || key === "timestamp") {
-          return new Date(value);
-        }
-        return value;
-      });
-    }
-  } catch (e) {
-    console.error("Failed to load sessions:", e);
-  }
-  return [];
-}
-
-function saveSessions(sessions: Session[]) {
-  try {
-    localStorage.setItem(STORAGE_KEY_SESSIONS, JSON.stringify(sessions));
-  } catch (e) {
-    console.error("Failed to save sessions:", e);
-  }
-}
-
-function loadCustomCommands(): CustomCommand[] {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY_COMMANDS);
-    if (stored) {
-      return JSON.parse(stored);
-    }
-  } catch (e) {
-    console.error("Failed to load custom commands:", e);
-  }
-  return [];
-}
-
-function saveCustomCommands(commands: CustomCommand[]) {
-  try {
-    localStorage.setItem(STORAGE_KEY_COMMANDS, JSON.stringify(commands));
-  } catch (e) {
-    console.error("Failed to save custom commands:", e);
-  }
-}
-
-const defaultSettings: AppSettings = {
-  theme: "dark",
-  showTimestamps: false,
-  autoScroll: true,
-  model: OPENAI_MODEL,
-  endpoint: OPENAI_BASE_URL,
-  apiKey: OPENAI_API_KEY,
-  version: 1,
-  keybindings: defaultKeybindings,
-};
-
 // Spinner frames for streaming indicator
 const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
-
-type Prompt =
-  | {
-      type: "confirm";
-      message: string;
-      onConfirm: () => void;
-      onCancel?: () => void;
-    }
-  | {
-      type: "input";
-      message: string;
-      defaultValue?: string;
-      placeholder?: string;
-      onConfirm: (value: string) => void;
-      onCancel?: () => void;
-    };
 
 function App() {
   const renderer = useRenderer();
@@ -330,9 +153,12 @@ function App() {
   const [requestStartAt, setRequestStartAt] = useState<number | null>(null);
   const [spinnerIndex, setSpinnerIndex] = useState(0);
   const [inputMode, setInputMode] = useState<InputMode>("chat");
-  type UISuggestion = { label: string; description?: string; kind: "command" | "custom-command" | "mention" };
+  const [mode, setMode] = useState<"standard" | "workflow">("standard");
+
   const [suggestions, setSuggestions] = useState<UISuggestion[]>([]);
   const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(0);
+  const [suggestionScrollOffset, setSuggestionScrollOffset] = useState(0);
+  const MAX_VISIBLE_SUGGESTIONS = 8;
   const [settings, setSettings] = useState<AppSettings>(() => loadSettings());
   const [sessions, setSessions] = useState<Session[]>(() => loadSessions());
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
@@ -340,18 +166,243 @@ function App() {
     loadCustomCommands()
   );
   const [showSessionList, setShowSessionList] = useState(false);
+  const [sessionFocusIndex, setSessionFocusIndex] = useState(0);
   const [showSettingsMenu, setShowSettingsMenu] = useState(false);
+  const [settingsFocusIndex, setSettingsFocusIndex] = useState(0);
   const [prompt, setPrompt] = useState<Prompt | null>(null);
+  const [promptInputValue, setPromptInputValue] = useState("");
   const scrollBoxRef = useRef<any>(null);
 
   const COLORS = useMemo(() => getTheme(settings.theme), [settings.theme]);
 
+  const recentSessions = useMemo(() => {
+    return [...sessions]
+      .sort(
+        (a, b) =>
+          new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+      )
+      .slice(0, 5);
+  }, [sessions]);
+
+  type StringSettingKey = keyof Pick<
+    AppSettings,
+    "model" | "endpoint" | "apiKey" | "afBridgeBaseUrl" | "afModel"
+  >;
+
+  const setStringSetting = useCallback(
+    (key: StringSettingKey, value: string | undefined) => {
+      setSettings((prev) => ({ ...prev, [key]: value }));
+    },
+    [setSettings]
+  );
+
+  const openSettingPrompt = useCallback(
+    (options: {
+      title: string;
+      currentValue?: string;
+      placeholder?: string;
+      onSubmit: (value: string | undefined) => void;
+    }) => {
+      setPrompt({
+        type: "input",
+        message: options.title,
+        defaultValue: options.currentValue || "",
+        placeholder: options.placeholder,
+        onConfirm: (val: string) => {
+          const trimmed = val.trim();
+          options.onSubmit(trimmed ? trimmed : undefined);
+          setPrompt(null);
+        },
+        onCancel: () => setPrompt(null),
+      });
+    },
+    [setPrompt]
+  );
+
+  const settingsSections = useMemo(() => {
+    const workflowEnabled = settings.workflow?.enabled ?? false;
+    const maskedKey = settings.apiKey
+      ? "***" + settings.apiKey.slice(-4)
+      : "Not set";
+    return [
+      {
+        title: "Core API",
+        items: [
+          {
+            id: "model",
+            label: "Model",
+            value: settings.model || "Not set",
+            description: "Default model for OpenAI Responses mode",
+            type: "text" as const,
+            onActivate: () =>
+              openSettingPrompt({
+                title: "Enter default model",
+                currentValue: settings.model,
+                placeholder: "gpt-4o-mini",
+                onSubmit: (value) => setStringSetting("model", value),
+              }),
+          },
+          {
+            id: "endpoint",
+            label: "Endpoint",
+            value: settings.endpoint || "Not set",
+            description: "Base URL for OpenAI / Azure Responses API",
+            type: "text" as const,
+            onActivate: () =>
+              openSettingPrompt({
+                title: "Enter API endpoint base URL",
+                currentValue: settings.endpoint,
+                placeholder: "https://api.openai.com/v1",
+                onSubmit: (value) => setStringSetting("endpoint", value),
+              }),
+          },
+          {
+            id: "apiKey",
+            label: "API Key",
+            value: maskedKey,
+            description: "Stored locally at ~/.qlaw-cli/qlaw_settings.json",
+            type: "text" as const,
+            onActivate: () =>
+              openSettingPrompt({
+                title: "Enter API key",
+                currentValue: settings.apiKey,
+                placeholder: "sk-...",
+                onSubmit: (value) => setStringSetting("apiKey", value),
+              }),
+          },
+        ],
+      },
+      {
+        title: "UI",
+        items: [
+          {
+            id: "theme",
+            label: "Theme",
+            value: settings.theme === "dark" ? "Dark" : "Light",
+            description: "Toggle dark/light palette",
+            type: "toggle" as const,
+            onActivate: () =>
+              setSettings((prev) => ({
+                ...prev,
+                theme: prev.theme === "dark" ? "light" : "dark",
+              })),
+          },
+          {
+            id: "timestamps",
+            label: "Timestamps",
+            value: settings.showTimestamps ? "Shown" : "Hidden",
+            description: "Toggle message timestamps",
+            type: "toggle" as const,
+            onActivate: () =>
+              setSettings((prev) => ({
+                ...prev,
+                showTimestamps: !prev.showTimestamps,
+              })),
+          },
+          {
+            id: "autoscroll",
+            label: "Auto-scroll",
+            value: settings.autoScroll ? "Enabled" : "Disabled",
+            description: "Scroll to bottom when streaming",
+            type: "toggle" as const,
+            onActivate: () =>
+              setSettings((prev) => ({
+                ...prev,
+                autoScroll: !prev.autoScroll,
+              })),
+          },
+        ],
+      },
+      {
+        title: "Agent Framework",
+        items: [
+          {
+            id: "afBridgeBaseUrl",
+            label: "Bridge URL",
+            value: settings.afBridgeBaseUrl || "Not set",
+            description: "FastAPI bridge for agent-framework workflows",
+            type: "text" as const,
+            onActivate: () =>
+              openSettingPrompt({
+                title: "Enter Agent Framework bridge base URL",
+                currentValue: settings.afBridgeBaseUrl,
+                placeholder: "http://127.0.0.1:8081",
+                onSubmit: (value) => setStringSetting("afBridgeBaseUrl", value),
+              }),
+          },
+          {
+            id: "afModel",
+            label: "AF Model",
+            value: settings.afModel || settings.model || "Not set",
+            description: "Workflow / fleet identifier exposed by the bridge",
+            type: "text" as const,
+            onActivate: () =>
+              openSettingPrompt({
+                title: "Enter Agent Framework model identifier",
+                currentValue: settings.afModel,
+                placeholder: "multi_tier_support",
+                onSubmit: (value) => setStringSetting("afModel", value),
+              }),
+          },
+          {
+            id: "workflowEnabled",
+            label: "Workflow mode",
+            value: workflowEnabled ? "Enabled" : "Disabled",
+            description: "When enabled, workflow mode stays active by default",
+            type: "toggle" as const,
+            onActivate: () =>
+              setSettings((prev) => ({
+                ...prev,
+                workflow: {
+                  ...(prev.workflow || {}),
+                  enabled: !(prev.workflow?.enabled ?? false),
+                },
+              })),
+          },
+        ],
+      },
+    ];
+  }, [settings, openSettingPrompt, setSettings, setStringSetting]);
+
+  const flatSettingsItems = useMemo(
+    () => settingsSections.flatMap((section) => section.items),
+    [settingsSections]
+  );
+
+  const handleSettingsItemActivate = useCallback(() => {
+    const target = flatSettingsItems[settingsFocusIndex];
+    if (target?.onActivate) {
+      target.onActivate();
+    }
+  }, [flatSettingsItems, settingsFocusIndex]);
+
+  const handleSessionActivate = useCallback(() => {
+    const target = recentSessions[sessionFocusIndex];
+    if (!target) return;
+    const resumedMessages = target.messages.map((message) => ({ ...message }));
+    resumedMessages.push({
+      id: `${target.id}-resume-${Date.now()}`,
+      role: "system",
+      content: `Resumed session "${target.name}" (${target.messages.length} messages).`,
+      timestamp: new Date(),
+    });
+    setMessages(resumedMessages);
+    setCurrentSessionId(target.id);
+    setShowSessionList(false);
+  }, [
+    recentSessions,
+    sessionFocusIndex,
+    setMessages,
+    setCurrentSessionId,
+    setShowSessionList,
+  ]);
+
   const matchKey = useCallback((key: any, spec: KeySpec) => {
     return (
       key.name === spec.name &&
-      (!!key.ctrl === !!spec.ctrl) &&
-      (!!key.alt === !!spec.alt) &&
-      (!!key.shift === !!spec.shift)
+      !!key.ctrl === !!spec.ctrl &&
+      !!key.alt === !!spec.alt &&
+      !!key.shift === !!spec.shift
     );
   }, []);
 
@@ -360,10 +411,46 @@ function App() {
     [settings.keybindings]
   );
 
-  // Auto-scroll to bottom when new messages arrive
+  const suggestionFooter = useMemo(() => {
+    if (inputMode === "command")
+      return "↑↓ navigate · tab autocomplete · enter run";
+    if (inputMode === "mention")
+      return "↑↓ navigate · tab autocomplete · enter insert";
+    return "";
+  }, [inputMode]);
+
+  const inputPlaceholder = useMemo(() => {
+    if (inputMode === "command") return "Type a command name…";
+    if (inputMode === "mention") return "Select a mention type…";
+    return mode === "workflow"
+      ? "Guide your agents…  (type / for commands · @ for context)"
+      : "Ask a question…  (type / for commands · @ for context)";
+  }, [inputMode, mode]);
+
+  const inputHint = useMemo(() => {
+    if (inputMode === "command")
+      return "↩ enter to run · tab autocomplete · esc cancel";
+    if (inputMode === "mention")
+      return "↑↓ choose mention · tab autocomplete · enter insert";
+    return "enter send · shift+enter newline · esc clear";
+  }, [inputMode]);
+
+  const inputBorderColor = useMemo(() => {
+    if (inputMode === "command") return COLORS.text.accent;
+    if (inputMode === "mention") return COLORS.text.tertiary;
+    return COLORS.border;
+  }, [inputMode, COLORS]);
+
+  const showSuggestionPanel = inputMode !== "chat";
+  const inputAreaMinHeight = showSuggestionPanel ? 9 : 4;
+  const inputAreaPaddingTop = showSuggestionPanel ? 1 : 0;
+
+  // Auto-scroll to bottom when new messages arrive if enabled
   useEffect(() => {
-    if (settings.autoScroll && scrollBoxRef.current) {
-      scrollBoxRef.current.scrollToBottom?.();
+    if (scrollBoxRef.current && messages.length > 0 && settings.autoScroll) {
+      setTimeout(() => {
+        scrollBoxRef.current?.scrollToBottom?.();
+      }, 0);
     }
   }, [messages, settings.autoScroll]);
 
@@ -371,7 +458,10 @@ function App() {
   useEffect(() => {
     let t: any;
     if (isProcessing) {
-      t = setInterval(() => setSpinnerIndex((i) => (i + 1) % SPINNER_FRAMES.length), 80);
+      t = setInterval(
+        () => setSpinnerIndex((i) => (i + 1) % SPINNER_FRAMES.length),
+        80
+      );
     }
     return () => t && clearInterval(t);
   }, [isProcessing]);
@@ -404,6 +494,15 @@ function App() {
     }
   }, [messages, currentSessionId]);
 
+  // Initialize prompt input value when prompt opens
+  useEffect(() => {
+    if (prompt && prompt.type === "input") {
+      setPromptInputValue(prompt.defaultValue || "");
+    } else if (!prompt) {
+      setPromptInputValue("");
+    }
+  }, [prompt]);
+
   // Command / mention detection + fuzzy suggestions
   useEffect(() => {
     if (input.startsWith("/")) {
@@ -411,41 +510,148 @@ function App() {
       const query = input.slice(1);
       const customKeys = new Set(customCommands.map((c) => c.name));
       const items = [
-        ...BUILT_IN_COMMANDS.map((c) => ({ key: c.name, description: c.description, keywords: c.keywords })),
-        ...customCommands.map((c) => ({ key: c.name, description: c.description })),
+        ...BUILT_IN_COMMANDS.map((c) => ({
+          key: c.name,
+          description: c.description,
+          keywords: c.keywords,
+        })),
+        ...customCommands.map((c) => ({
+          key: c.name,
+          description: c.description,
+        })),
       ];
-      const matches = fuzzyMatch(query, items, 8);
+      const matches = fuzzyMatch(query, items, items.length);
       const mapped: UISuggestion[] = matches.map((m) => ({
         label: m.key,
-        description: m.description || (customKeys.has(m.key) ? "Custom command" : getBuiltInDescription(m.key) || ""),
+        description:
+          m.description ||
+          (customKeys.has(m.key)
+            ? "Custom command"
+            : getBuiltInDescription(m.key) || ""),
         kind: customKeys.has(m.key) ? "custom-command" : "command",
       }));
       setSuggestions(mapped);
       setSelectedSuggestionIndex(0);
+      setSuggestionScrollOffset(0);
     } else if (input.startsWith("@")) {
       setInputMode("mention");
       const query = input.slice(1);
-      const items = MENTIONS.map((m) => ({ key: m.name, description: m.description }));
-      const matches = fuzzyMatch(query, items, 8);
-      const mapped: UISuggestion[] = matches.map((m) => ({ label: m.key, description: m.description, kind: "mention" }));
+      const items = MENTIONS.map((m) => ({
+        key: m.name,
+        description: m.description,
+      }));
+      const matches = fuzzyMatch(query, items, items.length);
+      const mapped: UISuggestion[] = matches.map((m) => ({
+        label: m.key,
+        description: m.description,
+        kind: "mention",
+      }));
       setSuggestions(mapped);
       setSelectedSuggestionIndex(0);
+      setSuggestionScrollOffset(0);
     } else {
       setInputMode("chat");
       setSuggestions([]);
       setSelectedSuggestionIndex(0);
+      setSuggestionScrollOffset(0);
     }
   }, [input, customCommands]);
 
+  useEffect(() => {
+    if (selectedSuggestionIndex < suggestionScrollOffset) {
+      setSuggestionScrollOffset(selectedSuggestionIndex);
+    } else if (
+      selectedSuggestionIndex >=
+      suggestionScrollOffset + MAX_VISIBLE_SUGGESTIONS
+    ) {
+      setSuggestionScrollOffset(
+        selectedSuggestionIndex - MAX_VISIBLE_SUGGESTIONS + 1
+      );
+    }
+  }, [
+    selectedSuggestionIndex,
+    suggestionScrollOffset,
+    MAX_VISIBLE_SUGGESTIONS,
+  ]);
+
+  useEffect(() => {
+    const maxOffset = Math.max(0, suggestions.length - MAX_VISIBLE_SUGGESTIONS);
+    setSuggestionScrollOffset((prev) => Math.min(prev, maxOffset));
+  }, [suggestions.length, MAX_VISIBLE_SUGGESTIONS]);
+
+  useEffect(() => {
+    if (showSessionList) {
+      setSessionFocusIndex(0);
+    }
+  }, [showSessionList]);
+
+  useEffect(() => {
+    if (!showSessionList) return;
+    if (recentSessions.length === 0) {
+      setSessionFocusIndex(0);
+      return;
+    }
+    setSessionFocusIndex((prev) => Math.min(prev, recentSessions.length - 1));
+  }, [showSessionList, recentSessions.length]);
+
+  useEffect(() => {
+    if (showSettingsMenu) {
+      setSettingsFocusIndex(0);
+    }
+  }, [showSettingsMenu]);
+
+  useEffect(() => {
+    if (!showSettingsMenu) return;
+    if (flatSettingsItems.length === 0) return;
+    setSettingsFocusIndex((prev) =>
+      Math.min(prev, Math.max(0, flatSettingsItems.length - 1))
+    );
+  }, [showSettingsMenu, flatSettingsItems.length]);
+
   useKeyboard((key) => {
-    // If a prompt is open, handle Esc and let overlay input handle Submit
+    if (showSessionList) {
+      if (key.name === "escape") {
+        setShowSessionList(false);
+        return;
+      }
+      if (recentSessions.length > 0) {
+        if (key.name === "down" || (key.name === "tab" && !key.shift)) {
+          setSessionFocusIndex((prev) => (prev + 1) % recentSessions.length);
+          return;
+        }
+        if (key.name === "up" || (key.name === "tab" && key.shift)) {
+          setSessionFocusIndex(
+            (prev) => (prev - 1 + recentSessions.length) % recentSessions.length
+          );
+          return;
+        }
+      }
+      if (key.name === "enter" || key.name === "return") {
+        handleSessionActivate();
+        return;
+      }
+      // Block other keystrokes while overlay is focused
+      return;
+    }
+
+    // If a prompt is open, handle Esc and Enter
     if (prompt) {
       if (key.name === "escape") {
         prompt.onCancel?.();
         setPrompt(null);
+        setPromptInputValue("");
         return;
       }
-      return; // ignore other keys (overlay input will capture enter)
+      if (key.name === "enter" && prompt.type === "confirm") {
+        prompt.onConfirm();
+        setPrompt(null);
+        setPromptInputValue("");
+        return;
+      }
+      // For input type prompts, let the input component handle Enter
+      if (prompt.type === "input") {
+        return; // input component will handle enter via onSubmit
+      }
     }
 
     // Settings overlay navigation
@@ -454,8 +660,29 @@ function App() {
         setShowSettingsMenu(false);
         return;
       }
-      // Let settings overlay itself handle Up/Down via focused internal input if needed
-      // Fall through to other handlers only if not handled
+      if (flatSettingsItems.length > 0) {
+        if (key.name === "down" || (key.name === "tab" && !key.shift)) {
+          setSettingsFocusIndex(
+            (prev) => (prev + 1) % flatSettingsItems.length
+          );
+          return;
+        }
+        if (key.name === "up" || (key.name === "tab" && key.shift)) {
+          setSettingsFocusIndex(
+            (prev) =>
+              (prev - 1 + flatSettingsItems.length) % flatSettingsItems.length
+          );
+          return;
+        }
+      }
+      if (
+        key.name === "enter" ||
+        key.name === "return" ||
+        key.name === "space"
+      ) {
+        handleSettingsItemActivate();
+        return;
+      }
     }
 
     // Suggestions navigation via keybindings
@@ -465,11 +692,15 @@ function App() {
       const autoSpecs = keyFor("autocomplete");
 
       if (nextSpecs.some((s) => matchKey(key, s))) {
-        setSelectedSuggestionIndex((prev) => (prev < suggestions.length - 1 ? prev + 1 : 0));
+        setSelectedSuggestionIndex((prev) =>
+          prev < suggestions.length - 1 ? prev + 1 : 0
+        );
         return;
       }
       if (prevSpecs.some((s) => matchKey(key, s))) {
-        setSelectedSuggestionIndex((prev) => (prev > 0 ? prev - 1 : suggestions.length - 1));
+        setSelectedSuggestionIndex((prev) =>
+          prev > 0 ? prev - 1 : suggestions.length - 1
+        );
         return;
       }
       if (autoSpecs.some((s) => matchKey(key, s))) {
@@ -502,6 +733,23 @@ function App() {
       return;
     }
 
+    // Toggle mode with Ctrl+M
+    if (key.ctrl && key.name === "m") {
+      setMode((prev) => (prev === "standard" ? "workflow" : "standard"));
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: Date.now().toString(),
+          role: "system",
+          content: `Mode toggled to: ${
+            mode === "standard" ? "workflow" : "standard"
+          }`,
+          timestamp: new Date(),
+        },
+      ]);
+      return;
+    }
+
     // Exit with Ctrl+C
     if (key.ctrl && key.name === "c") {
       renderer?.stop();
@@ -516,228 +764,123 @@ function App() {
   const executeCommand = useCallback(
     (command: string, args?: string) => {
       const cmd = command.toLowerCase();
-      const systemMsg: Message = {
-        id: Date.now().toString(),
-        role: "system",
-        content: "",
-        timestamp: new Date(),
+      const context: CommandContext = {
+        settings,
+        sessions,
+        messages,
+        customCommands,
+        currentSessionId,
+        setSettings,
+        setMessages,
+        setPrompt,
+        setPromptInputValue,
+        setShowSettingsMenu,
+        setShowSessionList,
+        setMode,
       };
 
+      let result: { systemMessage?: Message; shouldReturn?: boolean };
+
       switch (cmd) {
-        case "clear": {
-          if (messages.length > 0) {
-            setPrompt({
-              type: "confirm",
-              message: "Clear all messages?",
-              onConfirm: () => {
-                setMessages([]);
-                setPrompt(null);
-              },
-              onCancel: () => setPrompt(null),
-            });
-          }
-          return;
-        }
-
+        case "clear":
+          result = handleClearCommand(context, args);
+          break;
         case "help":
-          systemMsg.content = `Available commands:
-/clear              Clear all messages
-/help               Show this help
-/model              Set the model name
-/endpoint           Set the API endpoint base URL
-/api-key            Set the API key
-/settings           Configure application settings
-/sessions           List and select previous sessions
-/status             Show current status and configuration
-/terminal-setup     Configure terminal keybindings
-/commands           Manage custom commands
-/export             Export chat
-/theme              Toggle theme
-
-Mentions:
-@context - Add context
-@file - Reference file
-@code - Code snippet
-@docs - Documentation`;
+          result = handleHelpCommand();
           break;
-
-        case "model": {
-          const val = args?.trim();
-          if (val) {
-            setSettings((prev) => ({ ...prev, model: val }));
-            systemMsg.content = `Model set to: ${val}`;
-          } else {
-            setPrompt({
-              type: "input",
-              message: "Enter model name:",
-              defaultValue: settings.model || "",
-              onConfirm: (v) => {
-                setSettings((prev) => ({ ...prev, model: v.trim() }));
-                setPrompt(null);
-                setMessages((prev) => [
-                  ...prev,
-                  { id: Date.now().toString(), role: "system", content: `Model set to: ${v.trim()}`, timestamp: new Date() },
-                ]);
-              },
-              onCancel: () => setPrompt(null),
-            });
-          }
+        case "model":
+          result = handleModelCommand(args, context);
           break;
-        }
-
-        case "endpoint": {
-          const val = args?.trim();
-          if (val) {
-            setSettings((prev) => ({ ...prev, endpoint: val }));
-            systemMsg.content = `Endpoint set to: ${val}`;
-          } else {
-            setPrompt({
-              type: "input",
-              message: "Enter API endpoint base URL:",
-              defaultValue: settings.endpoint || "",
-              onConfirm: (v) => {
-                setSettings((prev) => ({ ...prev, endpoint: v.trim() }));
-                setPrompt(null);
-                setMessages((prev) => [
-                  ...prev,
-                  { id: Date.now().toString(), role: "system", content: `Endpoint set to: ${v.trim()}` , timestamp: new Date() },
-                ]);
-              },
-              onCancel: () => setPrompt(null),
-            });
-          }
+        case "endpoint":
+          result = handleEndpointCommand(args, context);
           break;
-        }
-
-        case "api-key": {
-          const val = args?.trim();
-          if (val) {
-            setSettings((prev) => ({ ...prev, apiKey: val }));
-            systemMsg.content = `API key updated.`;
-          } else {
-            setPrompt({
-              type: "input",
-              message: "Enter API key:",
-              defaultValue: settings.apiKey || "",
-              onConfirm: (v) => {
-                setSettings((prev) => ({ ...prev, apiKey: v.trim() }));
-                setPrompt(null);
-                setMessages((prev) => [
-                  ...prev,
-                  { id: Date.now().toString(), role: "system", content: `API key updated.` , timestamp: new Date() },
-                ]);
-              },
-              onCancel: () => setPrompt(null),
-            });
-          }
+        case "api-key":
+          result = handleApiKeyCommand(args, context);
           break;
-        }
-
+        case "af-bridge":
+          result = handleAfBridgeCommand(args, context);
+          break;
+        case "af-model":
+          result = handleAfModelCommand(args, context);
+          break;
+        case "keybindings":
+          result = handleKeybindingsCommand(args, context);
+          break;
         case "settings":
-          setShowSettingsMenu(true);
-          return;
-
+          result = handleSettingsCommand(args, context);
+          break;
         case "sessions":
-          setShowSessionList(true);
-          return;
-
+          result = handleSessionsCommand(context);
+          break;
         case "status":
-          systemMsg.content = `Current Configuration:
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Model:        ${settings.model || "Not set"}
-Endpoint:     ${settings.endpoint || "Not set"}
-API Key:      ${settings.apiKey ? "***" + settings.apiKey.slice(-4) : "Not set"}
-Theme:        ${settings.theme}
-Timestamps:   ${settings.showTimestamps ? "Shown" : "Hidden"}
-Auto-scroll:  ${settings.autoScroll ? "Enabled" : "Disabled"}
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Sessions:     ${sessions.length} saved
-Messages:     ${messages.length} in current chat
-Custom Cmds:  ${customCommands.length} defined`;
+          result = handleStatusCommand(context);
           break;
-
         case "terminal-setup":
-          systemMsg.content = `Terminal Keybindings Setup:
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-For multiline input support:
-
-VS Code / Cursor / Windsurf:
-  Add to keybindings.json:
-  {
-    "key": "shift+enter",
-    "command": "workbench.action.terminal.sendSequence",
-    "args": { "text": "\\n" }
-  }
-
-Windows Terminal:
-  Add to settings.json:
-  {
-    "command": { "action": "sendInput", "input": "\\n" },
-    "keys": "shift+enter"
-  }
-
-Current shortcuts:
-  Ctrl+C / Esc  - Exit
-  Ctrl+K        - Toggle debug console`;
+          result = handleTerminalSetupCommand();
           break;
-
         case "commands":
-          if (customCommands.length === 0) {
-            systemMsg.content = `Custom Commands:
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-No custom commands defined yet.
-
-To add a command, use:
-/commands add <name> <description> <command>
-
-Example:
-/commands add git-status "Show git status" "git status"`;
-          } else {
-            const cmdList = customCommands
-              .map(
-                (c, i) =>
-                  `${i + 1}. /${c.name}\n   ${c.description}\n   → ${c.command}`
-              )
-              .join("\n\n");
-            systemMsg.content = `Custom Commands:\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n${cmdList}\n\nUse: /commands remove <name>`;
-          }
+          result = handleCommandsCommand(context);
           break;
-
-        case "theme": {
-          const newTheme: ThemeName = settings.theme === "dark" ? "light" : "dark";
-          setSettings((prev) => ({ ...prev, theme: newTheme }));
-          systemMsg.content = `Theme changed to: ${newTheme}`;
+        case "theme":
+          result = handleThemeCommand(context);
           break;
-        }
-
-        case "export": {
-          const exportData = {
-            session: {
-              id: currentSessionId || "current",
-              exportedAt: new Date().toISOString(),
-            },
-            messages,
-            settings,
-          };
-          systemMsg.content = `Chat export:\n${JSON.stringify(exportData, null, 2)}`;
+        case "export":
+          result = handleExportCommand(context);
           break;
-        }
-
-        default: {
-          // Check custom commands
-          const customCmd = customCommands.find((c) => c.name === cmd);
-          if (customCmd) {
-            systemMsg.content = `Executing: ${customCmd.command}\n(Custom command execution not yet implemented)`;
-          } else {
-            systemMsg.content = `Unknown command: /${cmd}\nType /help for available commands`;
-          }
-        }
+        case "exit":
+        case "quit":
+          context.stop = () => renderer?.stop();
+          result = handleExitCommand(context);
+          break;
+        case "pwd":
+          result = handlePwdCommand();
+          break;
+        case "cwd":
+          result = handleCwdCommand(args);
+          break;
+        case "mode":
+          result = handleModeCommand(args, context);
+          break;
+        case "workflow":
+          result = handleWorkflowCommand();
+          break;
+        case "agents":
+          result = handleAgentsCommand();
+          break;
+        case "run":
+          result = handleRunCommand();
+          break;
+        case "continue":
+          result = handleContinueCommand();
+          break;
+        case "judge":
+          result = handleJudgeCommand();
+          break;
+        default:
+          result = handleUnknownCommand(cmd, context);
       }
 
-      setMessages((prev) => [...prev, systemMsg]);
+      if (result.shouldReturn) {
+        return;
+      }
+
+      if (result.systemMessage) {
+        setMessages((prev) => [...prev, result.systemMessage!]);
+      }
     },
-    [settings, sessions, messages, customCommands, currentSessionId]
+    [
+      settings,
+      sessions,
+      messages,
+      customCommands,
+      currentSessionId,
+      setSettings,
+      setMessages,
+      setPrompt,
+      setPromptInputValue,
+      setShowSettingsMenu,
+      setShowSessionList,
+    ]
   );
 
   const handleSubmit = useCallback(() => {
@@ -778,10 +921,13 @@ Example:
       return;
     }
 
+    // Format message with mentions if present
+    const formattedInput = formatMessageWithMentions(input.trim());
+
     const userMessage: Message = {
       id: Date.now().toString(),
       role: "user",
-      content: input.trim(),
+      content: formattedInput,
       timestamp: new Date(),
     };
 
@@ -803,26 +949,77 @@ Example:
     // Build history for this turn (use current state + new user)
     const historyForApi = [...messages, userMessage];
 
-    // Stream from OpenAI Responses API
-    streamResponseFromOpenAI({
-      history: historyForApi,
-      onDelta: (chunk) => {
-        setMessages((prev) =>
-          prev.map((m) => (m.id === assistantMessageId ? { ...m, content: m.content + chunk } : m))
-        );
-      },
-      onError: (err) => {
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === assistantMessageId ? { ...m, content: m.content + `\n\n[Error] ${err.message}` } : m
-          )
-        );
-      },
-      onDone: () => {
-        setIsProcessing(false);
-      },
-    });
-  }, [input, isProcessing, inputMode, executeCommand, messages, suggestions, selectedSuggestionIndex]);
+    // Route based on AF bridge configuration
+    const useAf =
+      mode === "workflow" &&
+      !!settings.afBridgeBaseUrl &&
+      !!(settings.afModel || settings.model);
+
+    if (useAf) {
+      const modelId = settings.afModel || settings.model || "workflow";
+      startWorkflow({
+        baseUrl: settings.afBridgeBaseUrl!,
+        model: modelId,
+        conversation: undefined,
+        input: input.trim(),
+        onDelta: (chunk) => {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === assistantMessageId
+                ? { ...m, content: m.content + chunk }
+                : m
+            )
+          );
+        },
+        onError: (err) => {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === assistantMessageId
+                ? { ...m, content: m.content + `\n\n[Error] ${err.message}` }
+                : m
+            )
+          );
+        },
+        onDone: () => {
+          setIsProcessing(false);
+        },
+      });
+    } else {
+      // Stream from OpenAI Responses API
+      streamResponseFromOpenAI({
+        history: historyForApi,
+        onDelta: (chunk) => {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === assistantMessageId
+                ? { ...m, content: m.content + chunk }
+                : m
+            )
+          );
+        },
+        onError: (err) => {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === assistantMessageId
+                ? { ...m, content: m.content + `\n\n[Error] ${err.message}` }
+                : m
+            )
+          );
+        },
+        onDone: () => {
+          setIsProcessing(false);
+        },
+      });
+    }
+  }, [
+    input,
+    isProcessing,
+    inputMode,
+    executeCommand,
+    messages,
+    suggestions,
+    selectedSuggestionIndex,
+  ]);
 
   // Show welcome screen if no messages
   const showWelcome = messages.length === 0;
@@ -833,21 +1030,17 @@ Example:
   }, [requestStartAt, isProcessing]);
 
   return (
-    <box flexDirection="column" flexGrow={1} style={{ backgroundColor: COLORS.bg.primary }}>
+    <box
+      flexDirection="column"
+      flexGrow={1}
+      style={{ backgroundColor: COLORS.bg.primary }}
+    >
       {/* Header */}
-      <box
-        style={{
-          height: 1,
-          backgroundColor: COLORS.bg.primary,
-          paddingLeft: 2,
-          paddingRight: 2,
-          justifyContent: "space-between",
-          alignItems: "center",
-        }}
-      >
-        <text content="QLAW CLI" style={{ fg: COLORS.text.secondary, attributes: TextAttributes.DIM }} />
-        <text content="" style={{ fg: COLORS.text.dim, attributes: TextAttributes.DIM }} />
-      </box>
+      <Header
+        mode={mode}
+        bridgeUrl={settings.afBridgeBaseUrl}
+        colors={COLORS}
+      />
 
       {/* Main Content Area */}
       <scrollbox
@@ -862,121 +1055,28 @@ Example:
         }}
       >
         {showWelcome ? (
-          <box flexDirection="column" style={{ width: "100%" }}>
-            <box style={{ flexDirection: "row" }}>
-              {/* Left panel */}
-              <box
-                flexDirection="column"
-                style={{
-                  width: 72,
-                  backgroundColor: COLORS.bg.panel,
-                  border: true,
-                  borderColor: COLORS.border,
-                  padding: 2,
-                  marginRight: 2,
-                }}
-              >
-                <text
-                  content="QLAW CLI"
-                  style={{ fg: COLORS.text.primary, attributes: TextAttributes.BOLD, marginBottom: 1 }}
-                />
-                <text
-                  content={`${process.cwd().replace(process.env.HOME || "", "~")}`}
-                  style={{ fg: COLORS.text.dim, attributes: TextAttributes.DIM, marginBottom: 1 }}
-                />
-                <text
-                  content="SessionStart:Callback hook succeeded: Success"
-                  style={{ fg: COLORS.text.tertiary, attributes: TextAttributes.DIM }}
-                />
-              </box>
-
-              {/* Right panel */}
-              <box
-                flexDirection="column"
-                style={{
-                  width: 48,
-                  backgroundColor: COLORS.bg.panel,
-                  border: true,
-                  borderColor: COLORS.border,
-                  padding: 2,
-                }}
-              >
-                <text
-                  content="Tips for getting started"
-                  style={{ fg: COLORS.text.accent, attributes: TextAttributes.BOLD, marginBottom: 1 }}
-                />
-                <text
-                  content="Run /help to see commands. Type @ to reference context. Use ESC to exit."
-                  style={{ fg: COLORS.text.secondary }}
-                />
-              </box>
-            </box>
-          </box>
+          <WelcomeScreen
+            cwd={process.cwd().replace(process.env.HOME || "", "~")}
+            colors={COLORS}
+          />
         ) : (
-          <box flexDirection="column" style={{ width: "100%" }}>
-            {messages.map((message, index) => (
-              <box
-                key={message.id}
-                style={{ marginBottom: index < messages.length - 1 ? 3 : 0, flexDirection: "column" }}
-              >
-                {/* Message Header with Icon */}
-                <box style={{ marginBottom: 1 }}>
-                  <text content="> " style={{ fg: COLORS.text.secondary }} />
-                  <text
-                    content={
-                      message.role === "user"
-                        ? message.content.substring(0, 80)
-                        : message.role === "system"
-                        ? "System"
-                        : `Assistant${isProcessing && index === messages.length - 1 ? " " + SPINNER_FRAMES[spinnerIndex] : ""}`
-                    }
-                    style={{ fg: COLORS.text.primary }}
-                  />
-                </box>
-
-                {/* Message Content */}
-                <text
-                  content={message.content}
-                  style={{ fg: COLORS.text.primary }}
-                />
-              </box>
-            ))}
-          </box>
+          <MessageList
+            messages={messages}
+            isProcessing={isProcessing}
+            spinnerFrame={SPINNER_FRAMES[spinnerIndex] || ""}
+            colors={COLORS}
+          />
         )}
       </scrollbox>
 
       {/* Session List Overlay */}
       {showSessionList && (
-        <box
-          style={{
-            position: "absolute",
-            top: 5,
-            left: 10,
-            right: 10,
-            maxHeight: 20,
-            backgroundColor: COLORS.bg.panel,
-            border: true,
-            borderColor: COLORS.border,
-            padding: 2,
-            zIndex: 100,
-          }}
-        >
-          <box flexDirection="column" style={{ width: "100%" }}>
-            <text content="Sessions" style={{ fg: COLORS.text.accent, attributes: TextAttributes.BOLD, marginBottom: 1 }} />
-            {sessions.length === 0 ? (
-              <text content="No saved sessions" style={{ fg: COLORS.text.tertiary }} />
-            ) : (
-              sessions.slice(-5).map((session, idx) => (
-                <text
-                  key={session.id}
-                  content={`${idx + 1}. ${session.name} (${session.messages.length} msgs, ${new Date(session.updatedAt).toLocaleDateString()})`}
-                  style={{ fg: COLORS.text.secondary, marginTop: 1 }}
-                />
-              ))
-            )}
-            <text content="\nPress ESC to close" style={{ fg: COLORS.text.dim, attributes: TextAttributes.DIM, marginTop: 1 }} />
-          </box>
-        </box>
+        <SessionList
+          sessions={sessions}
+          recentSessions={recentSessions}
+          focusIndex={sessionFocusIndex}
+          colors={COLORS}
+        />
       )}
 
       {/* Prompt Overlay */}
@@ -995,7 +1095,10 @@ Example:
           }}
         >
           <box flexDirection="column" style={{ width: "100%" }}>
-            <text content={prompt.message} style={{ fg: COLORS.text.secondary, marginBottom: 1 }} />
+            <text
+              content={prompt.message}
+              style={{ fg: COLORS.text.secondary, marginBottom: 1 }}
+            />
             {prompt.type === "input" ? (
               <box
                 style={{
@@ -1011,58 +1114,40 @@ Example:
               >
                 <input
                   placeholder={prompt.placeholder || "Type and press Enter"}
-                  value={prompt.defaultValue || ""}
-                  onInput={(v: string) => (prompt.defaultValue = v)}
+                  value={promptInputValue}
+                  onInput={(v: string) => setPromptInputValue(v)}
                   onSubmit={() => {
-                    prompt.onConfirm(prompt.defaultValue || "");
+                    prompt.onConfirm(promptInputValue);
+                    setPromptInputValue("");
                   }}
                   focused={true}
-                  style={{ flexGrow: 1, backgroundColor: COLORS.bg.primary, focusedBackgroundColor: COLORS.bg.primary }}
+                  style={{
+                    flexGrow: 1,
+                    backgroundColor: COLORS.bg.primary,
+                    focusedBackgroundColor: COLORS.bg.primary,
+                  }}
                 />
               </box>
             ) : (
-              <box style={{ marginTop: 1 }}>
-                <input
-                  placeholder="Press Enter to confirm · Esc to cancel"
-                  value=""
-                  onInput={() => {}}
-                  onSubmit={() => prompt.onConfirm()}
-                  focused={true}
-                  style={{ flexGrow: 1, backgroundColor: COLORS.bg.primary, focusedBackgroundColor: COLORS.bg.primary }}
-                />
-              </box>
+              <text
+                content="Press Enter to confirm · Esc to cancel"
+                style={{
+                  fg: COLORS.text.dim,
+                  attributes: TextAttributes.DIM,
+                  marginTop: 1,
+                }}
+              />
             )}
           </box>
         </box>
       )}
 
-      {/* Settings Menu Overlay (read-only summary for now) */}
       {showSettingsMenu && (
-        <box
-          style={{
-            position: "absolute",
-            top: 5,
-            left: 10,
-            right: 10,
-            maxHeight: 25,
-            backgroundColor: COLORS.bg.panel,
-            border: true,
-            borderColor: COLORS.border,
-            padding: 2,
-            zIndex: 100,
-          }}
-        >
-          <box flexDirection="column" style={{ width: "100%" }}>
-            <text content="Settings" style={{ fg: COLORS.text.accent, attributes: TextAttributes.BOLD, marginBottom: 1 }} />
-            <text content={`Model: ${settings.model || "Not set"}`} style={{ fg: COLORS.text.secondary, marginTop: 1 }} />
-            <text content={`Endpoint: ${settings.endpoint || "Not set"}`} style={{ fg: COLORS.text.secondary, marginTop: 1 }} />
-            <text content={`API Key: ${settings.apiKey ? "***" + settings.apiKey.slice(-4) : "Not set"}`} style={{ fg: COLORS.text.secondary, marginTop: 1 }} />
-            <text content={`Theme: ${settings.theme}`} style={{ fg: COLORS.text.secondary, marginTop: 1 }} />
-            <text content={`Timestamps: ${settings.showTimestamps ? "Shown" : "Hidden"}`} style={{ fg: COLORS.text.secondary, marginTop: 1 }} />
-            <text content={`Auto-scroll: ${settings.autoScroll ? "Enabled" : "Disabled"}`} style={{ fg: COLORS.text.secondary, marginTop: 1 }} />
-            <text content="\nUse /model, /endpoint, /api-key, /theme, /status to change settings\nPress ESC to close" style={{ fg: COLORS.text.dim, attributes: TextAttributes.DIM, marginTop: 2 }} />
-          </box>
-        </box>
+        <SettingsMenu
+          sections={settingsSections}
+          focusIndex={settingsFocusIndex}
+          colors={COLORS}
+        />
       )}
 
       {/* Input Area */}
@@ -1073,108 +1158,73 @@ Example:
           borderColor: COLORS.border,
           paddingLeft: 2,
           paddingRight: 2,
-          paddingTop: 1,
+          paddingTop: inputAreaPaddingTop,
           paddingBottom: 0,
           flexDirection: "column",
+          minHeight: inputAreaMinHeight,
+          flexShrink: 0,
         }}
       >
         {/* Command/Mention Suggestions Dropdown */}
-        {suggestions.length > 0 && (
-          <box
-            style={{
-              marginBottom: 1,
-              backgroundColor: COLORS.bg.panel,
-              border: true,
-              borderColor: COLORS.border,
-              paddingLeft: 1,
-              paddingRight: 1,
-              paddingTop: 1,
-              paddingBottom: 1,
-              flexDirection: "column",
-            }}
-          >
-            {suggestions.map((s, index) => {
-              const isSelected = index === selectedSuggestionIndex;
-              const prefix = inputMode === "command" ? "/" : "@";
-              return (
-                <box
-                  key={`${s.kind}:${s.label}`}
-                  style={{
-                    paddingLeft: 1,
-                    paddingRight: 1,
-                    backgroundColor: isSelected ? COLORS.bg.hover : "transparent",
-                    marginTop: index > 0 ? 1 : 0,
-                  }}
-                >
-                  <text
-                    content={`${prefix}${s.label}`}
-                    style={{
-                      fg: isSelected ? COLORS.text.accent : COLORS.text.secondary,
-                      attributes: isSelected ? TextAttributes.BOLD : 0,
-                      width: 24,
-                    }}
-                  />
-                  <text
-                    content={s.description || ""}
-                    style={{ fg: COLORS.text.tertiary, attributes: TextAttributes.DIM, marginLeft: 2 }}
-                  />
-                </box>
-              );
-            })}
-          </box>
+        {showSuggestionPanel && (
+          <SuggestionList
+            suggestions={suggestions}
+            selectedIndex={selectedSuggestionIndex}
+            scrollOffset={suggestionScrollOffset}
+            inputMode={inputMode}
+            input={input}
+            colors={COLORS}
+            maxVisible={MAX_VISIBLE_SUGGESTIONS}
+          />
         )}
 
         {/* Input Field */}
-        <box
-          style={{
-            border: true,
-            borderColor: COLORS.border,
-            backgroundColor: COLORS.bg.panel,
-            paddingLeft: 1,
-            paddingRight: 1,
-            paddingTop: 1,
-            paddingBottom: 1,
-            marginBottom: 1,
-            height: 3,
-          }}
-        >
-          <text content="> " style={{ fg: COLORS.text.secondary }} />
-          <input
-            placeholder={
-              inputMode === "command"
-                ? "Type command name..."
-                : inputMode === "mention"
-                ? "Select mention type..."
-                : inputMode === "model-input"
-                ? "Enter model name..."
-                : "Write a message…"
-            }
-            value={input}
-            onInput={handleInput}
-            onSubmit={handleSubmit}
-            focused={!isProcessing && !showSessionList && !showSettingsMenu && !prompt}
-            style={{ flexGrow: 1, backgroundColor: COLORS.bg.panel, focusedBackgroundColor: COLORS.bg.panel }}
-          />
-        </box>
+        <InputArea
+          input={input}
+          inputMode={inputMode}
+          isProcessing={isProcessing}
+          placeholder={inputPlaceholder}
+          hint={inputHint}
+          colors={COLORS}
+          onInput={handleInput}
+          onSubmit={handleSubmit}
+        />
 
         {/* Status Line */}
         <box style={{ justifyContent: "space-between", alignItems: "center" }}>
           <text
+            content={(() => {
+              if (isProcessing)
+                return `Warping... (esc to interrupt · ${elapsedSec}s)`;
+              if (showSuggestionPanel) return suggestionFooter;
+              const bridgePart =
+                mode === "workflow"
+                  ? settings.afBridgeBaseUrl
+                    ? "Workflow · AF bridge ready"
+                    : "Workflow · AF bridge not set"
+                  : "Standard";
+              return `Mode: ${bridgePart} · Theme: ${settings.theme} · /help for tips`;
+            })()}
+            style={{ fg: COLORS.text.dim, attributes: TextAttributes.DIM }}
+          />
+          <text
             content={
               isProcessing
-                ? `Warping... (esc to interrupt · ${elapsedSec}s)`
-                : suggestions.length > 0
-                ? "↑↓ navigate · tab autocomplete · enter submit"
-                : "? for shortcuts"
+                ? "Streaming..."
+                : mode === "workflow"
+                ? "@agents enabled"
+                : ""
             }
             style={{ fg: COLORS.text.dim, attributes: TextAttributes.DIM }}
           />
-          <text content={isProcessing ? "Streaming..." : ""} style={{ fg: COLORS.text.dim, attributes: TextAttributes.DIM }} />
         </box>
       </box>
     </box>
   );
 }
 
-const renderer = await createCliRenderer();
+// Setup terminal with dimensions
+const stdoutWithDimensions = createStdoutWithDimensions();
+
+const renderer = await createCliRenderer({ stdout: stdoutWithDimensions });
 createRoot(renderer).render(<App />);

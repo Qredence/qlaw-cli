@@ -69,6 +69,19 @@ bun run dev
 - Type `@` to see mention options
 - Press Esc to exit
 
+### Using Mentions
+
+Mentions help structure your messages for better AI understanding:
+
+**Examples:**
+
+- `@docs API authentication` - References documentation about API authentication
+- `@file src/index.ts` - References a specific file
+- `@code function example() { return true; }` - Includes a code snippet
+- `@context Additional information here` - Adds contextual information
+
+Mentions are automatically formatted when you send your message, providing structured context to the AI.
+
 ## Development Mode
 
 For contributors working locally with auto-reload:
