@@ -22,7 +22,8 @@
   },
   "homepage": "https://github.com/Qredence/qlaw-cli#readme",
   "publishConfig": {
-    "provenance": true
+    "provenance": true,
+    "access": "public"
   },
   "author": "Qredence",
   "keywords": [
