@@ -310,7 +310,7 @@ async def responses(request: OpenAIRequest):
         request.model, _get_conversation_id(request.conversation)
     )
     _ensure_workflow_row(request.model)
-    run_id = _ensure_run_row(request.model, conv_id)
+    _ensure_run_row(request.model, conv_id)
     initial = request.input if isinstance(request.input, str) else str(request.input)
 
     async def gen():
