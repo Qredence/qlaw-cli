@@ -196,6 +196,7 @@ async def lifespan(app: FastAPI):
         try:
             await _cleanup_task
         except asyncio.CancelledError:
+            # Task cancellation is expected during shutdown; safe to ignore.
             pass
 
 
