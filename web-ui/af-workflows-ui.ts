@@ -1,3 +1,5 @@
+/// <reference lib="dom" />
+
 type Theme = "dark" | "light";
 
 export function getStoredTheme(): Theme {
@@ -47,6 +49,7 @@ export function initListbox(root: HTMLElement) {
     else if (k === "enter") {
       e.preventDefault?.();
       const el = items[index];
+      if (!el) return;
       const ev = new CustomEvent("af-select", { detail: { index, value: el.getAttribute("data-af-value") } });
       root.dispatchEvent(ev);
       el.click?.();
@@ -61,6 +64,7 @@ export function validateAgentParams(values: Record<string, any>, schema: Validat
   const errors: Record<string, string> = {};
   Object.keys(schema).forEach(key => {
     const s = schema[key];
+    if (!s) return;
     const v = values[key];
     if (s.required && (v === undefined || v === null || v === "")) errors[key] = "required";
     if (v !== undefined && v !== null) {

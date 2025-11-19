@@ -22,6 +22,21 @@ uv pip install -r bridge/requirements.txt   # install bridge runtime deps
 - `bun run cli:af` – boot CLI wired to the bridge (defaults: `AF_BRIDGE_BASE_URL=http://127.0.0.1:8081`, `AF_MODEL=multi_tier_support`).
 - Env switches: `OPENAI_BASE_URL`, `OPENAI_API_KEY`, `OPENAI_MODEL`, `AF_BRIDGE_BASE_URL`, `AF_MODEL`.
 
+## Settings & Configuration Flow
+- All preferences persist to `~/.qlaw-cli/qlaw_settings.json` (auto-created on first run).
+- `/settings panel` opens the interactive overlay (Core API, UI, Agent Framework sections). Use `↑`/`↓` or `Tab` to select, `Enter` to edit/toggle, `Esc` to close. Running `/settings` without the `panel` suffix prints the summary inline.
+- Text fields open inline prompts that update the stored settings immediately; Agent Framework rows mirror `/af-bridge` + `/af-model`.
+- `workflow.enabled` (toggled via the overlay) controls whether the CLI prefers workflow/agent-framework mode by default.
+
+## Keybindings
+- The suggestion list exposes three configurable actions: `nextSuggestion`, `prevSuggestion`, and `autocomplete`.
+- Use `/keybindings` to view current bindings, `/keybindings set <action> <binding>` (e.g., `ctrl+n`, `shift+tab`) to change them, and `/keybindings reset` to restore defaults.
+
+## Agent Framework Wiring Tips
+- `/af-bridge <url>` and `/af-model <name>` update the per-user defaults without touching `.env`.
+- When both values are present and the CLI is in workflow mode, messages stream via `startWorkflow` (see `src/workflow.ts`).
+- `/agents`, `/workflow`, `/run`, `/continue`, and `/judge` remain the quick helpers for guiding a multi-agent session; combine them with mentions like `@coder` or `@planner` for direct routing.
+
 ## Bridge Service (FastAPI)
 ```zsh
 # from repo root

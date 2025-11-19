@@ -1,9 +1,10 @@
 import { expect, test, describe } from "bun:test";
 import { validateAgentParams } from "../../web-ui/af-workflows-ui";
+import type { ValidationSchema } from "../../web-ui/af-workflows-ui";
 
 describe("validation", () => {
   test("required fields", () => {
-    const schema = { name: { type: "string", required: true } };
+    const schema: ValidationSchema = { name: { type: "string", required: true } };
     const r1 = validateAgentParams({}, schema);
     expect(r1.valid).toBeFalse();
     expect(r1.errors.name).toBe("required");
@@ -12,7 +13,7 @@ describe("validation", () => {
   });
 
   test("number bounds", () => {
-    const schema = { temp: { type: "number", min: 1, max: 3 } } as any;
+    const schema: ValidationSchema = { temp: { type: "number", min: 1, max: 3 } };
     const r1 = validateAgentParams({ temp: 0 }, schema);
     expect(r1.errors.temp).toBe("min");
     const r2 = validateAgentParams({ temp: 4 }, schema);
@@ -21,4 +22,3 @@ describe("validation", () => {
     expect(r3.valid).toBeTrue();
   });
 });
-

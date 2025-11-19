@@ -1,6 +1,16 @@
 import { expect, test, describe } from "bun:test";
 import { startWorkflow, continueWorkflow } from "../src/workflow";
 
+function installFetchMock(fn: () => Promise<any>) {
+  const original = globalThis.fetch;
+  const mock = fn as unknown as typeof fetch;
+  (mock as any).preconnect = async () => {};
+  globalThis.fetch = mock;
+  return () => {
+    globalThis.fetch = original;
+  };
+}
+
 // Helper to create a mock reader from chunks
 function createMockReader(chunks: string[]): {
   read(): Promise<{ done: boolean; value?: Uint8Array }>;
@@ -38,9 +48,7 @@ describe("workflow service", () => {
   test("startWorkflow streams deltas and completes", async () => {
     const deltas: string[] = [];
     const calls: string[] = [];
-    // Mock fetch
-    const originalFetch = globalThis.fetch;
-    globalThis.fetch = async () => {
+    const restore = installFetchMock(async () => {
       calls.push("fetch:start");
       return createMockResponse([
         "event: response.output_text.delta\n",
@@ -50,7 +58,7 @@ describe("workflow service", () => {
         'data: {"delta": " World"}\n',
         "\n",
       ]);
-    };
+    });
 
     let done = false;
     await startWorkflow({
@@ -62,8 +70,7 @@ describe("workflow service", () => {
       onDone: () => { done = true; },
     });
 
-    // Restore fetch
-    globalThis.fetch = originalFetch;
+    restore();
 
     expect(calls).toEqual(["fetch:start"]);
     expect(deltas.join("")).toBe("Hello World");
@@ -72,14 +79,13 @@ describe("workflow service", () => {
 
   test("continueWorkflow streams deltas and completes", async () => {
     const deltas: string[] = [];
-    const originalFetch = globalThis.fetch;
-    globalThis.fetch = async () => {
+    const restore = installFetchMock(async () => {
       return createMockResponse([
         "event: response.output_text.delta\n",
         'data: {"delta": "Follow"}\n',
         "\n",
       ]);
-    };
+    });
 
     let done = false;
     await continueWorkflow({
@@ -91,10 +97,9 @@ describe("workflow service", () => {
       onDone: () => { done = true; },
     });
 
-    globalThis.fetch = originalFetch;
+    restore();
 
     expect(deltas.join("")).toBe("Follow");
     expect(done).toBe(true);
   });
 });
-

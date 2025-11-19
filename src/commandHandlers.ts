@@ -5,8 +5,11 @@ import type {
   CustomCommand,
   ThemeName,
   Prompt,
+  Action,
+  KeySpec,
 } from "./types.ts";
 import { generateUniqueId } from "./utils.ts";
+import { defaultKeybindings } from "./storage.ts";
 
 export interface CommandContext {
   settings: AppSettings;
@@ -77,10 +80,15 @@ general
   /status              Show status
   /theme               Toggle theme
   /terminal-setup      Configure terminal keys
+settings
+  /settings            Open settings panel
+  /keybindings [...]   View or edit keybindings
 ai
   /model <name>        Set model
   /endpoint <url>      Set API base URL
   /api-key <key>       Set API key
+  /af-bridge <url>     Set Agent Framework bridge
+  /af-model <name>     Set Agent Framework model
 workflow
   /mode <standard|workflow>  Switch mode
   /workflow            Workflow controls
@@ -175,7 +183,7 @@ export function handleJudgeCommand(): CommandResult {
 }
 
 function handleSettingCommand(
-  settingKey: "model" | "endpoint" | "apiKey",
+  settingKey: "model" | "endpoint" | "apiKey" | "afBridgeBaseUrl" | "afModel",
   promptMessage: string,
   confirmationFormatter: (value: string) => string,
   args: string | undefined,
@@ -245,9 +253,15 @@ export function handleApiKeyCommand(
 }
 
 export function handleSettingsCommand(
+  args: string | undefined,
   context: CommandContext
 ): CommandResult {
-  const { settings } = context;
+  const { settings, setShowSettingsMenu } = context;
+  const mode = (args || "").trim().toLowerCase();
+  const shouldOpenPanel = mode === "panel" || mode === "menu" || mode === "ui" || mode === "open";
+  if (shouldOpenPanel) {
+    setShowSettingsMenu(true);
+  }
   const systemMsg: Message = {
     id: generateUniqueId(),
     role: "system",
@@ -260,27 +274,237 @@ Timestamps:   ${settings.showTimestamps ? "Shown" : "Hidden"}
 Auto-scroll:  ${settings.autoScroll ? "Enabled" : "Disabled"}
 Agent Bridge: ${settings.afBridgeBaseUrl || "Not set"}
 AF Model:     ${settings.afModel || "Not set"}
+Workflow:     ${settings.workflow?.enabled ? "Enabled" : "Disabled"}
 
-Use /model, /endpoint, /api-key, /theme to change values`,
+Use /model, /endpoint, /api-key, /theme, /keybindings, /af-bridge, /af-model to change values
+Type "/settings panel" to open the interactive menu`,
     timestamp: new Date(),
   };
   return { systemMessage: systemMsg };
 }
 
+export function handleAfBridgeCommand(
+  args: string | undefined,
+  context: CommandContext
+): CommandResult {
+  return handleSettingCommand(
+    "afBridgeBaseUrl",
+    "Enter Agent Framework bridge base URL:",
+    (v) => `Agent Framework bridge URL set to: ${v}`,
+    args,
+    context
+  );
+}
+
+export function handleAfModelCommand(
+  args: string | undefined,
+  context: CommandContext
+): CommandResult {
+  return handleSettingCommand(
+    "afModel",
+    "Enter Agent Framework model identifier:",
+    (v) => `Agent Framework model set to: ${v}`,
+    args,
+    context
+  );
+}
+
+const ACTION_LABELS: Record<Action, string> = {
+  nextSuggestion: "Next suggestion",
+  prevSuggestion: "Previous suggestion",
+  autocomplete: "Autocomplete",
+};
+
+function formatKeySpec(spec: KeySpec): string {
+  const parts: string[] = [];
+  if (spec.ctrl) parts.push("Ctrl");
+  if (spec.alt) parts.push("Alt");
+  if (spec.shift) parts.push("Shift");
+  const normalized = spec.name || "";
+  const titleCase =
+    normalized.length <= 1
+      ? normalized.toUpperCase()
+      : `${normalized.charAt(0).toUpperCase()}${normalized.slice(1)}`;
+  const nameLabel = titleCase || normalized;
+  parts.push(nameLabel);
+  return parts.join("+");
+}
+
+function cloneKeybindings(bindings: Record<Action, KeySpec[]>): Record<Action, KeySpec[]> {
+  const entries = Object.entries(bindings).map(([action, specs]) => [action, specs.map((spec) => ({ ...spec }))]);
+  return Object.fromEntries(entries) as Record<Action, KeySpec[]>;
+}
+
+function parseKeySpec(input: string): KeySpec | null {
+  const parts = input
+    .split("+")
+    .map((p) => p.trim().toLowerCase())
+    .filter(Boolean);
+  if (parts.length === 0) return null;
+  const spec: KeySpec = { name: "" } as KeySpec;
+  for (const part of parts) {
+    if (part === "ctrl" || part === "control") {
+      spec.ctrl = true;
+      continue;
+    }
+    if (part === "alt" || part === "option") {
+      spec.alt = true;
+      continue;
+    }
+    if (part === "shift") {
+      spec.shift = true;
+      continue;
+    }
+    if (!spec.name) {
+      spec.name = part;
+    } else {
+      return null;
+    }
+  }
+  return spec.name ? spec : null;
+}
+
+export function handleKeybindingsCommand(
+  args: string | undefined,
+  context: CommandContext
+): CommandResult {
+  const { settings, setSettings } = context;
+  const trimmed = (args || "").trim();
+
+  if (!trimmed) {
+    const summary = (Object.keys(ACTION_LABELS) as Action[])
+      .map((action) => {
+        const bindings = settings.keybindings[action] || [];
+        const formatted = bindings.length > 0 ? bindings.map(formatKeySpec).join(", ") : "(not set)";
+        return `${ACTION_LABELS[action]} (${action}): ${formatted}`;
+      })
+      .join("\n");
+    return {
+      systemMessage: {
+        id: generateUniqueId(),
+        role: "system",
+        content: `Keybindings\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n${summary}\n\nUse /keybindings set <action> <binding> (e.g., /keybindings set nextSuggestion ctrl+n)\nUse /keybindings reset to restore defaults`,
+        timestamp: new Date(),
+      },
+    };
+  }
+
+  const parts = trimmed.split(/\s+/);
+  const subcommandRaw = parts.shift() ?? "";
+  const subcommand = subcommandRaw.toLowerCase();
+
+  if (subcommand === "reset") {
+    setSettings((prev) => ({
+      ...prev,
+      keybindings: cloneKeybindings(defaultKeybindings),
+    }));
+    return {
+      systemMessage: {
+        id: generateUniqueId(),
+        role: "system",
+        content: "Keybindings reset to defaults",
+        timestamp: new Date(),
+      },
+    };
+  }
+
+  if (subcommand === "set") {
+    const actionName = parts.shift();
+    if (!actionName) {
+      return {
+        systemMessage: {
+          id: generateUniqueId(),
+          role: "system",
+          content: `Usage: /keybindings set <action> <binding>\nActions: ${Object.keys(ACTION_LABELS).join(", ")}`,
+          timestamp: new Date(),
+        },
+      };
+    }
+    const action = actionName as Action;
+    if (!ACTION_LABELS[action]) {
+      return {
+        systemMessage: {
+          id: generateUniqueId(),
+          role: "system",
+          content: `Unknown action: ${actionName}\nActions: ${Object.keys(ACTION_LABELS).join(", ")}`,
+          timestamp: new Date(),
+        },
+      };
+    }
+    const bindingString = parts.join(" ").trim();
+    if (!bindingString) {
+      return {
+        systemMessage: {
+          id: generateUniqueId(),
+          role: "system",
+          content: "Provide a binding, e.g., ctrl+n or shift+tab",
+          timestamp: new Date(),
+        },
+      };
+    }
+
+    const combos = bindingString
+      .split(",")
+      .map((token) => token.trim())
+      .filter(Boolean)
+      .map((token) => parseKeySpec(token))
+      .filter((spec): spec is KeySpec => !!spec);
+
+    if (combos.length === 0) {
+      return {
+        systemMessage: {
+          id: generateUniqueId(),
+          role: "system",
+          content: "Invalid binding. Use format ctrl+k or shift+tab, separate multiples with commas.",
+          timestamp: new Date(),
+        },
+      };
+    }
+
+    setSettings((prev) => ({
+      ...prev,
+      keybindings: {
+        ...prev.keybindings,
+        [action]: combos,
+      },
+    }));
+
+    return {
+      systemMessage: {
+        id: generateUniqueId(),
+        role: "system",
+        content: `${ACTION_LABELS[action]} updated to: ${combos.map(formatKeySpec).join(", ")}`,
+        timestamp: new Date(),
+      },
+    };
+  }
+
+  return {
+    systemMessage: {
+      id: generateUniqueId(),
+      role: "system",
+      content: `Unknown keybindings command: ${subcommand}. Use /keybindings set|reset`,
+      timestamp: new Date(),
+    },
+  };
+}
+
 export function handleSessionsCommand(
   context: CommandContext
 ): CommandResult {
-  const { sessions } = context;
+  const { sessions, setShowSessionList } = context;
+  setShowSessionList(true);
   let content: string;
   if (sessions.length === 0) {
-    content = `Sessions\nNo saved sessions`;
+    content = `Sessions\nNo saved sessions yet. Start a conversation to create one.`;
   } else {
-    content = `Sessions\n${sessions
+    const summary = sessions
       .slice(-5)
       .map(
         (s, idx) => `${idx + 1}. ${s.name} (${s.messages.length} msgs, ${new Date(s.updatedAt).toLocaleDateString()})`
       )
-      .join("\n")}`;
+      .join("\n");
+    content = `Sessions\nOverlay opened. Use ↑↓ then Enter to resume.\n${summary}${sessions.length > 5 ? "\n…plus more (showing latest 5)" : ""}`;
   }
   return {
     systemMessage: { id: generateUniqueId(), role: "system", content, timestamp: new Date() },

@@ -11,6 +11,9 @@ export type BuiltInCommandName =
   | "theme"
   | "endpoint"
   | "api-key"
+  | "af-bridge"
+  | "af-model"
+  | "keybindings"
   | "exit"
   | "quit"
   | "pwd"
@@ -41,6 +44,9 @@ export const BUILT_IN_COMMANDS: CommandMeta[] = [
   { name: "theme", description: "Toggle theme", keywords: ["dark", "light"] },
   { name: "endpoint", description: "Set the API endpoint base URL", keywords: ["openai", "azure", "url"] },
   { name: "api-key", description: "Set the API key (masked)", keywords: ["token", "auth"] },
+  { name: "af-bridge", description: "Set Agent Framework bridge URL", keywords: ["workflow", "bridge"] },
+  { name: "af-model", description: "Set Agent Framework model", keywords: ["fleet", "agents"] },
+  { name: "keybindings", description: "View or edit suggestion keybindings", keywords: ["keys", "bindings"] },
   { name: "exit", description: "Exit the CLI", keywords: ["quit"] },
   { name: "quit", description: "Exit the CLI", keywords: ["exit"] },
   { name: "pwd", description: "Show current directory", keywords: ["cwd"] },

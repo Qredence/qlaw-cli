@@ -65,6 +65,9 @@ import {
   handleRunCommand,
   handleContinueCommand,
   handleJudgeCommand,
+  handleAfBridgeCommand,
+  handleAfModelCommand,
+  handleKeybindingsCommand,
   type CommandContext,
 } from "./commandHandlers.ts";
 import { formatMessageWithMentions } from "./mentionHandlers.ts";
@@ -144,8 +147,19 @@ function App() {
   const [inputMode, setInputMode] = useState<InputMode>("chat");
   const [mode, setMode] = useState<"standard" | "workflow">("standard");
   type UISuggestion = { label: string; description?: string; kind: "command" | "custom-command" | "mention" };
+  type SettingPanelItem = {
+    id: string;
+    label: string;
+    value: string;
+    description?: string;
+    type: "text" | "toggle" | "info";
+    onActivate?: () => void;
+  };
+  type SettingSection = { title: string; items: SettingPanelItem[] };
   const [suggestions, setSuggestions] = useState<UISuggestion[]>([]);
   const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(0);
+  const [suggestionScrollOffset, setSuggestionScrollOffset] = useState(0);
+  const MAX_VISIBLE_SUGGESTIONS = 8;
   const [settings, setSettings] = useState<AppSettings>(() => loadSettings());
   const [sessions, setSessions] = useState<Session[]>(() => loadSessions());
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
@@ -153,12 +167,225 @@ function App() {
     loadCustomCommands()
   );
   const [showSessionList, setShowSessionList] = useState(false);
+  const [sessionFocusIndex, setSessionFocusIndex] = useState(0);
   const [showSettingsMenu, setShowSettingsMenu] = useState(false);
+  const [settingsFocusIndex, setSettingsFocusIndex] = useState(0);
   const [prompt, setPrompt] = useState<Prompt | null>(null);
   const [promptInputValue, setPromptInputValue] = useState("");
   const scrollBoxRef = useRef<any>(null);
 
   const COLORS = useMemo(() => getTheme(settings.theme), [settings.theme]);
+
+  const recentSessions = useMemo(() => {
+    return [...sessions]
+      .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+      .slice(0, 5);
+  }, [sessions]);
+
+  type StringSettingKey = keyof Pick<
+    AppSettings,
+    "model" | "endpoint" | "apiKey" | "afBridgeBaseUrl" | "afModel"
+  >;
+
+  const setStringSetting = useCallback(
+    (key: StringSettingKey, value: string | undefined) => {
+      setSettings((prev) => ({ ...prev, [key]: value }));
+    },
+    [setSettings]
+  );
+
+  const openSettingPrompt = useCallback(
+    (options: {
+      title: string;
+      currentValue?: string;
+      placeholder?: string;
+      onSubmit: (value: string | undefined) => void;
+    }) => {
+      setPrompt({
+        type: "input",
+        message: options.title,
+        defaultValue: options.currentValue || "",
+        placeholder: options.placeholder,
+        onConfirm: (val: string) => {
+          const trimmed = val.trim();
+          options.onSubmit(trimmed ? trimmed : undefined);
+          setPrompt(null);
+        },
+        onCancel: () => setPrompt(null),
+      });
+    },
+    [setPrompt]
+  );
+
+  const settingsSections = useMemo<SettingSection[]>(() => {
+    const workflowEnabled = settings.workflow?.enabled ?? false;
+    const maskedKey = settings.apiKey ? "***" + settings.apiKey.slice(-4) : "Not set";
+    return [
+      {
+        title: "Core API",
+        items: [
+          {
+            id: "model",
+            label: "Model",
+            value: settings.model || "Not set",
+            description: "Default model for OpenAI Responses mode",
+            type: "text",
+            onActivate: () =>
+              openSettingPrompt({
+                title: "Enter default model",
+                currentValue: settings.model,
+                placeholder: "gpt-4o-mini",
+                onSubmit: (value) => setStringSetting("model", value),
+              }),
+          },
+          {
+            id: "endpoint",
+            label: "Endpoint",
+            value: settings.endpoint || "Not set",
+            description: "Base URL for OpenAI / Azure Responses API",
+            type: "text",
+            onActivate: () =>
+              openSettingPrompt({
+                title: "Enter API endpoint base URL",
+                currentValue: settings.endpoint,
+                placeholder: "https://api.openai.com/v1",
+                onSubmit: (value) => setStringSetting("endpoint", value),
+              }),
+          },
+          {
+            id: "apiKey",
+            label: "API Key",
+            value: maskedKey,
+            description: "Stored locally at ~/.qlaw-cli/qlaw_settings.json",
+            type: "text",
+            onActivate: () =>
+              openSettingPrompt({
+                title: "Enter API key",
+                currentValue: settings.apiKey,
+                placeholder: "sk-...",
+                onSubmit: (value) => setStringSetting("apiKey", value),
+              }),
+          },
+        ],
+      },
+      {
+        title: "UI",
+        items: [
+          {
+            id: "theme",
+            label: "Theme",
+            value: settings.theme === "dark" ? "Dark" : "Light",
+            description: "Toggle dark/light palette",
+            type: "toggle",
+            onActivate: () =>
+              setSettings((prev) => ({
+                ...prev,
+                theme: prev.theme === "dark" ? "light" : "dark",
+              })),
+          },
+          {
+            id: "timestamps",
+            label: "Timestamps",
+            value: settings.showTimestamps ? "Shown" : "Hidden",
+            description: "Toggle message timestamps",
+            type: "toggle",
+            onActivate: () =>
+              setSettings((prev) => ({
+                ...prev,
+                showTimestamps: !prev.showTimestamps,
+              })),
+          },
+          {
+            id: "autoscroll",
+            label: "Auto-scroll",
+            value: settings.autoScroll ? "Enabled" : "Disabled",
+            description: "Scroll to bottom when streaming",
+            type: "toggle",
+            onActivate: () =>
+              setSettings((prev) => ({
+                ...prev,
+                autoScroll: !prev.autoScroll,
+              })),
+          },
+        ],
+      },
+      {
+        title: "Agent Framework",
+        items: [
+          {
+            id: "afBridgeBaseUrl",
+            label: "Bridge URL",
+            value: settings.afBridgeBaseUrl || "Not set",
+            description: "FastAPI bridge for agent-framework workflows",
+            type: "text",
+            onActivate: () =>
+              openSettingPrompt({
+                title: "Enter Agent Framework bridge base URL",
+                currentValue: settings.afBridgeBaseUrl,
+                placeholder: "http://127.0.0.1:8081",
+                onSubmit: (value) => setStringSetting("afBridgeBaseUrl", value),
+              }),
+          },
+          {
+            id: "afModel",
+            label: "AF Model",
+            value: settings.afModel || settings.model || "Not set",
+            description: "Workflow / fleet identifier exposed by the bridge",
+            type: "text",
+            onActivate: () =>
+              openSettingPrompt({
+                title: "Enter Agent Framework model identifier",
+                currentValue: settings.afModel,
+                placeholder: "multi_tier_support",
+                onSubmit: (value) => setStringSetting("afModel", value),
+              }),
+          },
+          {
+            id: "workflowEnabled",
+            label: "Workflow mode",
+            value: workflowEnabled ? "Enabled" : "Disabled",
+            description: "When enabled, workflow mode stays active by default",
+            type: "toggle",
+            onActivate: () =>
+              setSettings((prev) => ({
+                ...prev,
+                workflow: {
+                  ...(prev.workflow || {}),
+                  enabled: !(prev.workflow?.enabled ?? false),
+                },
+              })),
+          },
+        ],
+      },
+    ];
+  }, [settings, openSettingPrompt, setSettings, setStringSetting]);
+
+  const flatSettingsItems = useMemo(
+    () => settingsSections.flatMap((section) => section.items),
+    [settingsSections]
+  );
+
+  const handleSettingsItemActivate = useCallback(() => {
+    const target = flatSettingsItems[settingsFocusIndex];
+    if (target?.onActivate) {
+      target.onActivate();
+    }
+  }, [flatSettingsItems, settingsFocusIndex]);
+
+  const handleSessionActivate = useCallback(() => {
+    const target = recentSessions[sessionFocusIndex];
+    if (!target) return;
+    const resumedMessages = target.messages.map((message) => ({ ...message }));
+    resumedMessages.push({
+      id: `${target.id}-resume-${Date.now()}`,
+      role: "system",
+      content: `Resumed session "${target.name}" (${target.messages.length} messages).`,
+      timestamp: new Date(),
+    });
+    setMessages(resumedMessages);
+    setCurrentSessionId(target.id);
+    setShowSessionList(false);
+  }, [recentSessions, sessionFocusIndex, setMessages, setCurrentSessionId, setShowSessionList]);
 
   const matchKey = useCallback((key: any, spec: KeySpec) => {
     return (
@@ -173,6 +400,63 @@ function App() {
     (action: Action): KeySpec[] => settings.keybindings[action] || [],
     [settings.keybindings]
   );
+
+  const inputPlaceholder = useMemo(() => {
+    if (inputMode === "command") return "Type a command name…";
+    if (inputMode === "mention") return "Select a mention type…";
+    return mode === "workflow"
+      ? "Guide your agents…  (type / for commands · @ for context)"
+      : "Ask a question…  (type / for commands · @ for context)";
+  }, [inputMode, mode]);
+
+  const inputHint = useMemo(() => {
+    if (inputMode === "command") return "↩ enter to run · tab autocomplete · esc cancel";
+    if (inputMode === "mention") return "↑↓ choose mention · tab autocomplete · enter insert";
+    return "enter send · shift+enter newline · esc clear";
+  }, [inputMode]);
+
+  const inputBorderColor = useMemo(() => {
+    if (inputMode === "command") return COLORS.text.accent;
+    if (inputMode === "mention") return COLORS.text.tertiary;
+    return COLORS.border;
+  }, [inputMode, COLORS]);
+
+  const showSuggestionPanel = inputMode !== "chat";
+  const inputAreaMinHeight = showSuggestionPanel ? 9 : 4;
+  const inputAreaPaddingTop = showSuggestionPanel ? 1 : 0;
+
+  const suggestionHeader = useMemo(() => {
+    if (inputMode === "command") return "Commands";
+    if (inputMode === "mention") return "Mentions";
+    return "Suggestions";
+  }, [inputMode]);
+
+  const suggestionFooter = useMemo(() => {
+    if (inputMode === "command") return "↑↓ navigate · tab autocomplete · enter run";
+    if (inputMode === "mention") return "↑↓ navigate · tab autocomplete · enter insert";
+    return "";
+  }, [inputMode]);
+
+  const suggestionEmptyMessage = useMemo(() => {
+    if (inputMode === "command") return "No commands match. Try /help.";
+    if (inputMode === "mention") return "No mention types match.";
+    return "";
+  }, [inputMode]);
+
+  const suggestionWindow = useMemo(() => {
+    if (suggestions.length === 0) {
+      return { items: [], offset: 0, hasAbove: false, hasBelow: false };
+    }
+    const maxOffset = Math.max(0, suggestions.length - MAX_VISIBLE_SUGGESTIONS);
+    const offset = Math.min(suggestionScrollOffset, maxOffset);
+    const items = suggestions.slice(offset, offset + MAX_VISIBLE_SUGGESTIONS);
+    return {
+      items,
+      offset,
+      hasAbove: offset > 0,
+      hasBelow: offset + items.length < suggestions.length,
+    };
+  }, [suggestions, suggestionScrollOffset, MAX_VISIBLE_SUGGESTIONS]);
 
   // Auto-scroll to bottom when new messages arrive if enabled
   useEffect(() => {
@@ -239,7 +523,7 @@ function App() {
         ...BUILT_IN_COMMANDS.map((c) => ({ key: c.name, description: c.description, keywords: c.keywords })),
         ...customCommands.map((c) => ({ key: c.name, description: c.description })),
       ];
-      const matches = fuzzyMatch(query, items, 8);
+      const matches = fuzzyMatch(query, items, items.length);
       const mapped: UISuggestion[] = matches.map((m) => ({
         label: m.key,
         description: m.description || (customKeys.has(m.key) ? "Custom command" : getBuiltInDescription(m.key) || ""),
@@ -247,22 +531,90 @@ function App() {
       }));
       setSuggestions(mapped);
       setSelectedSuggestionIndex(0);
+      setSuggestionScrollOffset(0);
     } else if (input.startsWith("@")) {
       setInputMode("mention");
       const query = input.slice(1);
       const items = MENTIONS.map((m) => ({ key: m.name, description: m.description }));
-      const matches = fuzzyMatch(query, items, 8);
+      const matches = fuzzyMatch(query, items, items.length);
       const mapped: UISuggestion[] = matches.map((m) => ({ label: m.key, description: m.description, kind: "mention" }));
       setSuggestions(mapped);
       setSelectedSuggestionIndex(0);
+      setSuggestionScrollOffset(0);
     } else {
       setInputMode("chat");
       setSuggestions([]);
       setSelectedSuggestionIndex(0);
+      setSuggestionScrollOffset(0);
     }
   }, [input, customCommands]);
 
+  useEffect(() => {
+    if (selectedSuggestionIndex < suggestionScrollOffset) {
+      setSuggestionScrollOffset(selectedSuggestionIndex);
+    } else if (selectedSuggestionIndex >= suggestionScrollOffset + MAX_VISIBLE_SUGGESTIONS) {
+      setSuggestionScrollOffset(selectedSuggestionIndex - MAX_VISIBLE_SUGGESTIONS + 1);
+    }
+  }, [selectedSuggestionIndex, suggestionScrollOffset, MAX_VISIBLE_SUGGESTIONS]);
+
+  useEffect(() => {
+    const maxOffset = Math.max(0, suggestions.length - MAX_VISIBLE_SUGGESTIONS);
+    setSuggestionScrollOffset((prev) => Math.min(prev, maxOffset));
+  }, [suggestions.length, MAX_VISIBLE_SUGGESTIONS]);
+
+  useEffect(() => {
+    if (showSessionList) {
+      setSessionFocusIndex(0);
+    }
+  }, [showSessionList]);
+
+  useEffect(() => {
+    if (!showSessionList) return;
+    if (recentSessions.length === 0) {
+      setSessionFocusIndex(0);
+      return;
+    }
+    setSessionFocusIndex((prev) => Math.min(prev, recentSessions.length - 1));
+  }, [showSessionList, recentSessions.length]);
+
+  useEffect(() => {
+    if (showSettingsMenu) {
+      setSettingsFocusIndex(0);
+    }
+  }, [showSettingsMenu]);
+
+  useEffect(() => {
+    if (!showSettingsMenu) return;
+    if (flatSettingsItems.length === 0) return;
+    setSettingsFocusIndex((prev) =>
+      Math.min(prev, Math.max(0, flatSettingsItems.length - 1))
+    );
+  }, [showSettingsMenu, flatSettingsItems.length]);
+
   useKeyboard((key) => {
+    if (showSessionList) {
+      if (key.name === "escape") {
+        setShowSessionList(false);
+        return;
+      }
+      if (recentSessions.length > 0) {
+        if (key.name === "down" || (key.name === "tab" && !key.shift)) {
+          setSessionFocusIndex((prev) => (prev + 1) % recentSessions.length);
+          return;
+        }
+        if (key.name === "up" || (key.name === "tab" && key.shift)) {
+          setSessionFocusIndex((prev) => (prev - 1 + recentSessions.length) % recentSessions.length);
+          return;
+        }
+      }
+      if (key.name === "enter" || key.name === "return") {
+        handleSessionActivate();
+        return;
+      }
+      // Block other keystrokes while overlay is focused
+      return;
+    }
+
     // If a prompt is open, handle Esc and Enter
     if (prompt) {
       if (key.name === "escape") {
@@ -289,8 +641,20 @@ function App() {
         setShowSettingsMenu(false);
         return;
       }
-      // Let settings overlay itself handle Up/Down via focused internal input if needed
-      // Fall through to other handlers only if not handled
+      if (flatSettingsItems.length > 0) {
+        if (key.name === "down" || (key.name === "tab" && !key.shift)) {
+          setSettingsFocusIndex((prev) => (prev + 1) % flatSettingsItems.length);
+          return;
+        }
+        if (key.name === "up" || (key.name === "tab" && key.shift)) {
+          setSettingsFocusIndex((prev) => (prev - 1 + flatSettingsItems.length) % flatSettingsItems.length);
+          return;
+        }
+      }
+      if (key.name === "enter" || key.name === "return" || key.name === "space") {
+        handleSettingsItemActivate();
+        return;
+      }
     }
 
     // Suggestions navigation via keybindings
@@ -400,8 +764,17 @@ function App() {
         case "api-key":
           result = handleApiKeyCommand(args, context);
           break;
+        case "af-bridge":
+          result = handleAfBridgeCommand(args, context);
+          break;
+        case "af-model":
+          result = handleAfModelCommand(args, context);
+          break;
+        case "keybindings":
+          result = handleKeybindingsCommand(args, context);
+          break;
         case "settings":
-          result = handleSettingsCommand(context);
+          result = handleSettingsCommand(args, context);
           break;
         case "sessions":
           result = handleSessionsCommand(context);
@@ -733,19 +1106,49 @@ function App() {
           }}
         >
           <box flexDirection="column" style={{ width: "100%" }}>
-            <text content="Sessions" style={{ fg: COLORS.text.accent, attributes: TextAttributes.BOLD, marginBottom: 1 }} />
-            {sessions.length === 0 ? (
-              <text content="No saved sessions" style={{ fg: COLORS.text.tertiary }} />
+            <text content="Recent Sessions" style={{ fg: COLORS.text.accent, attributes: TextAttributes.BOLD, marginBottom: 1 }} />
+            {recentSessions.length === 0 ? (
+              <text content="No saved sessions yet. Start chatting to build history." style={{ fg: COLORS.text.tertiary }} />
             ) : (
-              sessions.slice(-5).map((session, idx) => (
-                <text
-                  key={session.id}
-                  content={`${idx + 1}. ${session.name} (${session.messages.length} msgs, ${new Date(session.updatedAt).toLocaleDateString()})`}
-                  style={{ fg: COLORS.text.secondary, marginTop: 1 }}
-                />
-              ))
+              recentSessions.map((session, idx) => {
+                const isSelected = idx === sessionFocusIndex;
+                return (
+                  <box
+                    key={session.id}
+                    flexDirection="column"
+                    style={{
+                      marginTop: 1,
+                      padding: 1,
+                      border: true,
+                      borderColor: isSelected ? COLORS.text.accent : COLORS.border,
+                      backgroundColor: isSelected ? COLORS.bg.hover : COLORS.bg.panel,
+                    }}
+                  >
+                    <text
+                      content={session.name}
+                      style={{
+                        fg: COLORS.text.primary,
+                        attributes: isSelected ? TextAttributes.BOLD : 0,
+                      }}
+                    />
+                    <text
+                      content={`${session.messages.length} messages · Updated ${new Date(session.updatedAt).toLocaleString()}`}
+                      style={{ fg: COLORS.text.secondary, attributes: TextAttributes.DIM, marginTop: 1 }}
+                    />
+                  </box>
+                );
+              })
             )}
-            <text content="\nPress ESC to close" style={{ fg: COLORS.text.dim, attributes: TextAttributes.DIM, marginTop: 1 }} />
+            <text
+              content={"\n↑↓ select · enter resume · esc close"}
+              style={{ fg: COLORS.text.dim, attributes: TextAttributes.DIM, marginTop: 1 }}
+            />
+            {sessions.length > 5 && (
+              <text
+                content="Showing latest 5 sessions · Use /sessions for full list"
+                style={{ fg: COLORS.text.tertiary, attributes: TextAttributes.DIM, marginTop: 1 }}
+              />
+            )}
           </box>
         </box>
       )}
@@ -802,7 +1205,6 @@ function App() {
         </box>
       )}
 
-      {/* Settings Menu Overlay (read-only summary for now) */}
       {showSettingsMenu && (
         <box
           style={{
@@ -820,13 +1222,59 @@ function App() {
         >
           <box flexDirection="column" style={{ width: "100%" }}>
             <text content="Settings" style={{ fg: COLORS.text.accent, attributes: TextAttributes.BOLD, marginBottom: 1 }} />
-            <text content={`Model: ${settings.model || "Not set"}`} style={{ fg: COLORS.text.secondary, marginTop: 1 }} />
-            <text content={`Endpoint: ${settings.endpoint || "Not set"}`} style={{ fg: COLORS.text.secondary, marginTop: 1 }} />
-            <text content={`API Key: ${settings.apiKey ? "***" + settings.apiKey.slice(-4) : "Not set"}`} style={{ fg: COLORS.text.secondary, marginTop: 1 }} />
-            <text content={`Theme: ${settings.theme}`} style={{ fg: COLORS.text.secondary, marginTop: 1 }} />
-            <text content={`Timestamps: ${settings.showTimestamps ? "Shown" : "Hidden"}`} style={{ fg: COLORS.text.secondary, marginTop: 1 }} />
-            <text content={`Auto-scroll: ${settings.autoScroll ? "Enabled" : "Disabled"}`} style={{ fg: COLORS.text.secondary, marginTop: 1 }} />
-            <text content="\nUse /model, /endpoint, /api-key, /theme, /status to change settings\nPress ESC to close" style={{ fg: COLORS.text.dim, attributes: TextAttributes.DIM, marginTop: 2 }} />
+            <text
+              content="↑↓ navigate · Enter edit/toggle · Esc close"
+              style={{ fg: COLORS.text.dim, attributes: TextAttributes.DIM }}
+            />
+            {(() => {
+              let itemIndex = -1;
+              return settingsSections.map((section) => (
+                <box key={section.title} flexDirection="column" style={{ marginTop: 1 }}>
+                  <text
+                    content={section.title}
+                    style={{ fg: COLORS.text.secondary, attributes: TextAttributes.BOLD }}
+                  />
+                  {section.items.map((item) => {
+                    itemIndex += 1;
+                    const isSelected = settingsFocusIndex === itemIndex;
+                    return (
+                      <box
+                        key={item.id}
+                        flexDirection="column"
+                        style={{
+                          marginTop: 1,
+                          padding: 1,
+                          border: true,
+                          borderColor: isSelected ? COLORS.text.accent : COLORS.border,
+                          backgroundColor: isSelected ? COLORS.bg.hover : COLORS.bg.panel,
+                        }}
+                      >
+                        <box style={{ justifyContent: "space-between" }}>
+                          <text
+                            content={item.label}
+                            style={{ fg: COLORS.text.primary, attributes: isSelected ? TextAttributes.BOLD : 0 }}
+                          />
+                          <text
+                            content={item.value}
+                            style={{ fg: COLORS.text.secondary }}
+                          />
+                        </box>
+                        {item.description && (
+                          <text
+                            content={item.description}
+                            style={{ fg: COLORS.text.tertiary, attributes: TextAttributes.DIM, marginTop: 1 }}
+                          />
+                        )}
+                      </box>
+                    );
+                  })}
+                </box>
+              ));
+            })()}
+            <text
+              content={"\nTip: /keybindings set <action> <binding> to update suggestion keys.\nUse /af-bridge + /af-model to point workflow mode at a new agent-framework bridge."}
+              style={{ fg: COLORS.text.dim, attributes: TextAttributes.DIM, marginTop: 2 }}
+            />
           </box>
         </box>
       )}
@@ -840,15 +1288,15 @@ function App() {
           borderColor: COLORS.border,
           paddingLeft: 2,
           paddingRight: 2,
-          paddingTop: 1,
+          paddingTop: inputAreaPaddingTop,
           paddingBottom: 0,
           flexDirection: "column",
-          minHeight: 5,
+          minHeight: inputAreaMinHeight,
           flexShrink: 0,
         }}
       >
         {/* Command/Mention Suggestions Dropdown */}
-        {suggestions.length > 0 && (
+        {showSuggestionPanel && (
           <box
             style={{
               marginBottom: 1,
@@ -862,34 +1310,90 @@ function App() {
               flexDirection: "column",
             }}
           >
-            {suggestions.map((s, index) => {
-              const isSelected = index === selectedSuggestionIndex;
-              const prefix = inputMode === "command" ? "/" : "@";
-              return (
+            <text
+              content={`${suggestionHeader}${input.startsWith("/") || input.startsWith("@") ? ` · ${input}` : ""}`}
+              style={{ fg: COLORS.text.secondary, attributes: TextAttributes.BOLD }}
+            />
+            {suggestions.length === 0 ? (
+              <text
+                content={suggestionEmptyMessage}
+                style={{ fg: COLORS.text.dim, attributes: TextAttributes.DIM, marginTop: 1 }}
+              />
+            ) : (
+              <box flexDirection="column" style={{ marginTop: 1 }}>
+                {suggestionWindow.hasAbove && (
+                  <text
+                    content="⋯"
+                    style={{ fg: COLORS.text.dim, attributes: TextAttributes.DIM, marginBottom: 1 }}
+                  />
+                )}
                 <box
-                  key={`${s.kind}:${s.label}`}
                   style={{
-                    paddingLeft: 1,
-                    paddingRight: 1,
-                    backgroundColor: isSelected ? COLORS.bg.hover : "transparent",
-                    marginTop: index > 0 ? 1 : 0,
+                    flexDirection: "column",
                   }}
                 >
-                  <text
-                    content={`${prefix}${s.label}`}
-                    style={{
-                      fg: isSelected ? COLORS.text.accent : COLORS.text.secondary,
-                      attributes: isSelected ? TextAttributes.BOLD : 0,
-                      width: 24,
-                    }}
-                  />
-                  <text
-                    content={s.description || ""}
-                    style={{ fg: COLORS.text.tertiary, attributes: TextAttributes.DIM, marginLeft: 2 }}
-                  />
+                  {suggestionWindow.items.map((s, index) => {
+                    const globalIndex = suggestionWindow.offset + index;
+                    const isSelected = globalIndex === selectedSuggestionIndex;
+                    const prefix = inputMode === "command" ? "/" : "@";
+                    const kindLabel =
+                      s.kind === "custom-command"
+                        ? "custom"
+                        : s.kind === "command"
+                      ? "built-in"
+                      : "mention";
+                  return (
+                    <box
+                      key={`${s.kind}:${s.label}`}
+                      style={{
+                        paddingLeft: 1,
+                        paddingRight: 1,
+                        paddingTop: 0,
+                        paddingBottom: 0,
+                        backgroundColor: isSelected ? COLORS.bg.hover : "transparent",
+                        flexDirection: "column",
+                        border: true,
+                        borderColor: isSelected ? COLORS.text.accent : COLORS.border,
+                        marginBottom: 0,
+                      }}
+                    >
+                      <box style={{ justifyContent: "space-between", alignItems: "center" }}>
+                        <text
+                          content={`${prefix}${s.label}`}
+                          style={{
+                            fg: isSelected ? COLORS.text.accent : COLORS.text.secondary,
+                            attributes: isSelected ? TextAttributes.BOLD : 0,
+                          }}
+                        />
+                        <text
+                          content={kindLabel}
+                          style={{ fg: COLORS.text.tertiary, attributes: TextAttributes.DIM }}
+                        />
+                      </box>
+                      {s.description && (
+                        <text
+                          content={s.description}
+                          style={{ fg: COLORS.text.tertiary, attributes: TextAttributes.DIM, marginTop: 0 }}
+                        />
+                      )}
+                    </box>
+                  );
+                })}
                 </box>
-              );
-            })}
+                {suggestionWindow.hasBelow && (
+                  <text
+                    content="⋯"
+                    style={{ fg: COLORS.text.dim, attributes: TextAttributes.DIM, marginTop: 1 }}
+                  />
+                )}
+              </box>
+            )}
+            {suggestionFooter && (
+              <text
+                content={suggestionFooter}
+                style={{ fg: COLORS.text.dim, attributes: TextAttributes.DIM, marginTop: 1 }}
+              />
+            )}
           </box>
         )}
 
@@ -897,48 +1401,69 @@ function App() {
         <box
           style={{
             border: true,
-            borderColor: COLORS.border,
-            backgroundColor: COLORS.bg.panel,
+            borderColor: inputBorderColor,
+            backgroundColor: COLORS.bg.secondary,
             paddingLeft: 1,
             paddingRight: 1,
-            paddingTop: 1,
-            paddingBottom: 1,
+            paddingTop: 0,
+            paddingBottom: 0,
             marginBottom: 1,
-            height: 3,
-            minHeight: 3,
+            flexDirection: "column",
             flexShrink: 0,
           }}
         >
-          <text content="> " style={{ fg: COLORS.text.secondary }} />
-          <input
-            placeholder={
-              inputMode === "command"
-                ? "Type command name..."
-                : inputMode === "mention"
-                ? "Select mention type..."
-                : "Write a message…"
-            }
-            value={input}
-            onInput={handleInput}
-            onSubmit={handleSubmit}
-            focused={!isProcessing && !showSessionList && !showSettingsMenu && !prompt}
-            style={{ flexGrow: 1, backgroundColor: COLORS.bg.panel, focusedBackgroundColor: COLORS.bg.panel }}
+          <box
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              minHeight: 3,
+            }}
+          >
+            <text content="> " style={{ fg: inputBorderColor, attributes: TextAttributes.BOLD, marginRight: 1 }} />
+            <input
+              placeholder={inputPlaceholder}
+              value={input}
+              onInput={handleInput}
+              onSubmit={handleSubmit}
+              focused={!isProcessing && !showSessionList && !showSettingsMenu && !prompt}
+              style={{
+                flexGrow: 1,
+                backgroundColor: COLORS.bg.secondary,
+                focusedBackgroundColor: COLORS.bg.secondary,
+                textColor: COLORS.text.primary,
+                focusedTextColor: COLORS.text.primary,
+                placeholderColor: COLORS.text.dim,
+                cursorColor: inputBorderColor,
+                height: 1,
+              }}
+            />
+          </box>
+          <text
+            content={inputHint}
+            style={{ fg: COLORS.text.dim, attributes: TextAttributes.DIM, marginTop: 0 }}
           />
         </box>
 
         {/* Status Line */}
         <box style={{ justifyContent: "space-between", alignItems: "center" }}>
           <text
-            content={
-              isProcessing
-                ? `Warping... (esc to interrupt · ${elapsedSec}s)`
-                : suggestions.length > 0
-                ? "↑↓ navigate · tab autocomplete · enter submit"
-                : `Type /help · Mode: ${mode === "workflow" ? "Workflow" : "Standard"}`
-            }
+            content={(() => {
+              if (isProcessing) return `Warping... (esc to interrupt · ${elapsedSec}s)`;
+              if (showSuggestionPanel) return suggestionFooter;
+              const bridgePart =
+                mode === "workflow"
+                  ? settings.afBridgeBaseUrl
+                    ? "Workflow · AF bridge ready"
+                    : "Workflow · AF bridge not set"
+                  : "Standard";
+              return `Mode: ${bridgePart} · Theme: ${settings.theme} · /help for tips`;
+            })()}
             style={{ fg: COLORS.text.dim, attributes: TextAttributes.DIM }}
           />
-          <text content={isProcessing ? "Streaming..." : ""} style={{ fg: COLORS.text.dim, attributes: TextAttributes.DIM }} />
+          <text
+            content={isProcessing ? "Streaming..." : mode === "workflow" ? "@agents enabled" : ""}
+            style={{ fg: COLORS.text.dim, attributes: TextAttributes.DIM }}
+          />
         </box>
       </box>
     </box>

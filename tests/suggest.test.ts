@@ -103,7 +103,9 @@ describe("fuzzyMatch", () => {
       const lowerResults = fuzzyMatch("help", testItems);
       expect(upperResults[0]?.key).toBe("help");
       expect(lowerResults[0]?.key).toBe("help");
-      expect(upperResults[0]?.score).toBe(lowerResults[0]?.score);
+      const upperScore = upperResults[0]?.score ?? 0;
+      const lowerScore = lowerResults[0]?.score ?? 0;
+      expect(upperScore).toBe(lowerScore);
     });
 
     test("should handle mixed case", () => {
@@ -219,4 +221,3 @@ describe("fuzzyMatch", () => {
     });
   });
 });
-

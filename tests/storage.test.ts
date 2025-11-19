@@ -1,4 +1,7 @@
 import { expect, test, describe, beforeEach, afterEach } from "bun:test";
+import { mkdtempSync, rmSync, writeFileSync, readFileSync } from "fs";
+import { tmpdir } from "os";
+import { join } from "path";
 import {
   loadSettings,
   saveSettings,
@@ -13,40 +16,30 @@ import {
 } from "../src/storage";
 import type { AppSettings, Session, CustomCommand } from "../src/types";
 
-// Mock localStorage
-const mockLocalStorage: Record<string, string> = {};
+let dataDir: string;
+const tmpPrefix = join(tmpdir(), "qlaw-storage-");
+
+const filePathFor = (key: string) => join(process.env.QLAW_DATA_DIR!, `${key}.json`);
+const writeJson = (key: string, payload: unknown) => {
+  writeFileSync(filePathFor(key), JSON.stringify(payload));
+};
+const readJson = (key: string) => JSON.parse(readFileSync(filePathFor(key), "utf-8"));
 
 beforeEach(() => {
-  // Clear mock storage before each test
-  Object.keys(mockLocalStorage).forEach((key) => delete mockLocalStorage[key]);
-  
-  // Override localStorage methods
-  globalThis.localStorage = {
-    getItem: (key: string) => mockLocalStorage[key] || null,
-    setItem: (key: string, value: string) => {
-      mockLocalStorage[key] = value;
-    },
-    removeItem: (key: string) => {
-      delete mockLocalStorage[key];
-    },
-    clear: () => {
-      Object.keys(mockLocalStorage).forEach((key) => delete mockLocalStorage[key]);
-    },
-    get length() {
-      return Object.keys(mockLocalStorage).length;
-    },
-    key: (index: number) => Object.keys(mockLocalStorage)[index] || null,
-  } as Storage;
+  dataDir = mkdtempSync(tmpPrefix);
+  process.env.QLAW_DATA_DIR = dataDir;
 });
 
 afterEach(() => {
-  // Clean up
-  Object.keys(mockLocalStorage).forEach((key) => delete mockLocalStorage[key]);
+  if (dataDir) {
+    rmSync(dataDir, { recursive: true, force: true });
+  }
+  delete process.env.QLAW_DATA_DIR;
 });
 
 describe("storage", () => {
   describe("loadSettings", () => {
-    test("should return default settings when localStorage is empty", () => {
+    test("should return default settings when no file exists", () => {
       const settings = loadSettings();
       expect(settings).toBeDefined();
       expect(settings.theme).toBe(defaultSettings.theme);
@@ -61,8 +54,8 @@ describe("storage", () => {
         showTimestamps: true,
         model: "gpt-4",
       };
-      localStorage.setItem(STORAGE_KEY_SETTINGS, JSON.stringify(savedSettings));
-      
+      writeJson(STORAGE_KEY_SETTINGS, savedSettings);
+
       const loaded = loadSettings();
       expect(loaded.theme).toBe("light");
       expect(loaded.showTimestamps).toBe(true);
@@ -71,8 +64,8 @@ describe("storage", () => {
 
     test("should merge saved settings with defaults", () => {
       const partialSettings = { theme: "light" };
-      localStorage.setItem(STORAGE_KEY_SETTINGS, JSON.stringify(partialSettings));
-      
+      writeJson(STORAGE_KEY_SETTINGS, partialSettings);
+
       const loaded = loadSettings();
       expect(loaded.theme).toBe("light");
       expect(loaded.showTimestamps).toBe(defaultSettings.showTimestamps);
@@ -80,19 +73,17 @@ describe("storage", () => {
     });
 
     test("should handle corrupted JSON gracefully", () => {
-      localStorage.setItem(STORAGE_KEY_SETTINGS, "invalid json{");
-      
+      writeFileSync(filePathFor(STORAGE_KEY_SETTINGS), "invalid json{");
+
       const settings = loadSettings();
-      expect(settings).toBeDefined();
       expect(settings.theme).toBe(defaultSettings.theme);
     });
 
     test("should preserve keybindings from defaults if missing", () => {
       const settingsWithoutKeybindings = { theme: "light" };
-      localStorage.setItem(STORAGE_KEY_SETTINGS, JSON.stringify(settingsWithoutKeybindings));
-      
+      writeJson(STORAGE_KEY_SETTINGS, settingsWithoutKeybindings);
+
       const loaded = loadSettings();
-      expect(loaded.keybindings).toBeDefined();
       expect(loaded.keybindings).toEqual(defaultSettings.keybindings);
     });
 
@@ -103,36 +94,33 @@ describe("storage", () => {
   });
 
   describe("saveSettings", () => {
-    test("should save settings to localStorage", () => {
+    test("should save settings to disk", async () => {
       const settings: AppSettings = {
         ...defaultSettings,
         theme: "light",
         model: "gpt-4",
       };
-      
-      saveSettings(settings);
-      const saved = localStorage.getItem(STORAGE_KEY_SETTINGS);
-      expect(saved).toBeDefined();
-      
-      const parsed = JSON.parse(saved!);
+
+      await saveSettings(settings);
+      const parsed = readJson(STORAGE_KEY_SETTINGS);
       expect(parsed.theme).toBe("light");
       expect(parsed.model).toBe("gpt-4");
     });
 
-    test("should overwrite existing settings", () => {
+    test("should overwrite existing settings", async () => {
       const firstSettings: AppSettings = { ...defaultSettings, theme: "dark" };
-      saveSettings(firstSettings);
-      
+      await saveSettings(firstSettings);
+
       const secondSettings: AppSettings = { ...defaultSettings, theme: "light" };
-      saveSettings(secondSettings);
-      
-      const loaded = loadSettings();
-      expect(loaded.theme).toBe("light");
+      await saveSettings(secondSettings);
+
+      const parsed = readJson(STORAGE_KEY_SETTINGS);
+      expect(parsed.theme).toBe("light");
     });
   });
 
   describe("loadSessions", () => {
-    test("should return empty array when localStorage is empty", () => {
+    test("should return empty array when no file exists", () => {
       const sessions = loadSessions();
       expect(Array.isArray(sessions)).toBe(true);
       expect(sessions.length).toBe(0);
@@ -155,10 +143,10 @@ describe("storage", () => {
           updatedAt: new Date("2024-01-02"),
         },
       ];
-      
-      localStorage.setItem(STORAGE_KEY_SESSIONS, JSON.stringify(testSessions));
+
+      writeJson(STORAGE_KEY_SESSIONS, testSessions);
       const loaded = loadSessions();
-      
+
       expect(loaded.length).toBe(2);
       expect(loaded[0]?.id).toBe("1");
       expect(loaded[1]?.id).toBe("2");
@@ -174,17 +162,17 @@ describe("storage", () => {
           updatedAt: new Date("2024-01-01T10:00:00Z"),
         },
       ];
-      
-      localStorage.setItem(STORAGE_KEY_SESSIONS, JSON.stringify(testSessions));
+
+      writeJson(STORAGE_KEY_SESSIONS, testSessions);
       const loaded = loadSessions();
-      
+
       expect(loaded[0]?.createdAt).toBeInstanceOf(Date);
       expect(loaded[0]?.updatedAt).toBeInstanceOf(Date);
     });
 
     test("should handle corrupted JSON gracefully", () => {
-      localStorage.setItem(STORAGE_KEY_SESSIONS, "invalid json{");
-      
+      writeFileSync(filePathFor(STORAGE_KEY_SESSIONS), "invalid json{");
+
       const sessions = loadSessions();
       expect(Array.isArray(sessions)).toBe(true);
       expect(sessions.length).toBe(0);
@@ -192,7 +180,7 @@ describe("storage", () => {
   });
 
   describe("saveSessions", () => {
-    test("should save sessions to localStorage", () => {
+    test("should save sessions to disk", async () => {
       const sessions: Session[] = [
         {
           id: "1",
@@ -202,17 +190,14 @@ describe("storage", () => {
           updatedAt: new Date("2024-01-01"),
         },
       ];
-      
-      saveSessions(sessions);
-      const saved = localStorage.getItem(STORAGE_KEY_SESSIONS);
-      expect(saved).toBeDefined();
-      
-      const parsed = JSON.parse(saved!);
+
+      await saveSessions(sessions);
+      const parsed = readJson(STORAGE_KEY_SESSIONS);
       expect(parsed.length).toBe(1);
       expect(parsed[0]?.id).toBe("1");
     });
 
-    test("should overwrite existing sessions", () => {
+    test("should overwrite existing sessions", async () => {
       const firstSessions: Session[] = [
         {
           id: "1",
@@ -222,8 +207,8 @@ describe("storage", () => {
           updatedAt: new Date(),
         },
       ];
-      saveSessions(firstSessions);
-      
+      await saveSessions(firstSessions);
+
       const secondSessions: Session[] = [
         {
           id: "2",
@@ -233,8 +218,8 @@ describe("storage", () => {
           updatedAt: new Date(),
         },
       ];
-      saveSessions(secondSessions);
-      
+      await saveSessions(secondSessions);
+
       const loaded = loadSessions();
       expect(loaded.length).toBe(1);
       expect(loaded[0]?.id).toBe("2");
@@ -242,7 +227,7 @@ describe("storage", () => {
   });
 
   describe("loadCustomCommands", () => {
-    test("should return empty array when localStorage is empty", () => {
+    test("should return empty array when no file exists", () => {
       const commands = loadCustomCommands();
       expect(Array.isArray(commands)).toBe(true);
       expect(commands.length).toBe(0);
@@ -257,18 +242,18 @@ describe("storage", () => {
           command: "echo test",
         },
       ];
-      
-      localStorage.setItem(STORAGE_KEY_COMMANDS, JSON.stringify(testCommands));
+
+      writeJson(STORAGE_KEY_COMMANDS, testCommands);
       const loaded = loadCustomCommands();
-      
+
       expect(loaded.length).toBe(1);
       expect(loaded[0]?.id).toBe("1");
       expect(loaded[0]?.name).toBe("test");
     });
 
     test("should handle corrupted JSON gracefully", () => {
-      localStorage.setItem(STORAGE_KEY_COMMANDS, "invalid json{");
-      
+      writeFileSync(filePathFor(STORAGE_KEY_COMMANDS), "invalid json{");
+
       const commands = loadCustomCommands();
       expect(Array.isArray(commands)).toBe(true);
       expect(commands.length).toBe(0);
@@ -276,7 +261,7 @@ describe("storage", () => {
   });
 
   describe("saveCustomCommands", () => {
-    test("should save custom commands to localStorage", () => {
+    test("should save custom commands to disk", async () => {
       const commands: CustomCommand[] = [
         {
           id: "1",
@@ -285,31 +270,27 @@ describe("storage", () => {
           command: "echo test",
         },
       ];
-      
-      saveCustomCommands(commands);
-      const saved = localStorage.getItem(STORAGE_KEY_COMMANDS);
-      expect(saved).toBeDefined();
-      
-      const parsed = JSON.parse(saved!);
+
+      await saveCustomCommands(commands);
+      const parsed = readJson(STORAGE_KEY_COMMANDS);
       expect(parsed.length).toBe(1);
       expect(parsed[0]?.name).toBe("test");
     });
 
-    test("should overwrite existing commands", () => {
+    test("should overwrite existing commands", async () => {
       const firstCommands: CustomCommand[] = [
         { id: "1", name: "first", description: "First", command: "echo 1" },
       ];
-      saveCustomCommands(firstCommands);
-      
+      await saveCustomCommands(firstCommands);
+
       const secondCommands: CustomCommand[] = [
         { id: "2", name: "second", description: "Second", command: "echo 2" },
       ];
-      saveCustomCommands(secondCommands);
-      
+      await saveCustomCommands(secondCommands);
+
       const loaded = loadCustomCommands();
       expect(loaded.length).toBe(1);
       expect(loaded[0]?.id).toBe("2");
     });
   });
 });
-

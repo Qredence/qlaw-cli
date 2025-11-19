@@ -51,6 +51,10 @@ export const defaultSettings: AppSettings = {
 
 // Get data directory path (~/.qlaw-cli/)
 function getDataDir(): string {
+  const override = process.env.QLAW_DATA_DIR;
+  if (override && override.trim().length > 0) {
+    return override;
+  }
   const home = process.env.HOME || process.env.USERPROFILE || process.env.HOMEPATH;
   if (!home) {
     throw new Error("Could not determine home directory");
