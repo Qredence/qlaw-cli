@@ -51,7 +51,6 @@ export function formatMessageWithMentions(message: string): string {
   const sortedMentions = [...mentions].sort((a, b) => b.startIndex - a.startIndex);
 
   for (const mention of sortedMentions) {
-    const originalText = message.slice(mention.startIndex, mention.endIndex);
     const formattedMention = formatMention(mention.type, mention.content);
     formatted = formatted.slice(0, mention.startIndex) + formattedMention + formatted.slice(mention.endIndex);
   }
