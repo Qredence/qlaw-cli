@@ -273,7 +273,6 @@ export async function parseSSEStream(
         currentEvent = null;
       }
     }
-    buf = "";
   }
 }
 
