@@ -956,7 +956,7 @@ function App() {
       timestamp: new Date(),
     };
 
-    // Helper to update the last message efficiently (O(1) instead of O(n) map)
+    // Helper to update the last message efficiently (reduces per-element overhead vs O(n) map)
     const updateLastMessage = (
       contentUpdater: (currentContent: string) => string
     ) => {

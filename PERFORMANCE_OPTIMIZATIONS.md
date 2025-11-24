@@ -52,12 +52,12 @@ Multiple performance bottlenecks were identified and resolved across the TypeScr
 **Solution:**
 - Replaced `.map()` operations with direct array index updates
 - Updated only the last message (known to be the streaming response)
-- Reduced complexity from O(n) to O(1) per chunk
+- Reduced from O(n) map with per-element processing to O(n) shallow copy with direct element update
 
 **Impact:**
-- Dramatically improved streaming performance
+- Approximately halved the work per streaming chunk
 - Reduced CPU usage during AI responses
-- Eliminated lag during streaming with many messages
+- Eliminated per-element processing overhead during streaming
 
 **Files Modified:**
 - `src/index.tsx` - Optimized onDelta and onError handlers in both workflow and OpenAI streaming
@@ -103,7 +103,7 @@ Multiple performance bottlenecks were identified and resolved across the TypeScr
 
 ### After Optimizations
 - File writes: ~3-4 writes/second during typing (90% reduction)
-- Streaming update complexity: O(1) per chunk
+- Streaming update complexity: O(n) shallow copy per chunk (reduced per-element work)
 - Array allocations: ~2 per keystroke (80% reduction)
 - SSE code: ~50 lines (50% reduction)
 
@@ -113,7 +113,7 @@ Multiple performance bottlenecks were identified and resolved across the TypeScr
 2. **Memoization**: Use React.useMemo for expensive computations or data transformations
 3. **Direct Updates**: When possible, update array elements directly instead of mapping
 4. **DRY Principle**: Extract duplicate code into reusable functions
-5. **O(1) over O(n)**: Optimize for constant-time operations when dealing with growing datasets
+5. **Minimize work per operation**: When unable to achieve O(1), reduce per-element processing overhead in O(n) operations
 
 ## Future Optimization Opportunities
 
