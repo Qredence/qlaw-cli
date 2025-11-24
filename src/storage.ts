@@ -2,6 +2,7 @@ import type { AppSettings, Session, CustomCommand, Action, KeySpec } from "./typ
 import { mkdir } from "fs/promises";
 import { existsSync, readFileSync } from "fs";
 import { join } from "path";
+import { debounce } from "./utils.ts";
 
 export const STORAGE_KEY_SETTINGS = "qlaw_settings";
 export const STORAGE_KEY_SESSIONS = "qlaw_sessions";
@@ -163,3 +164,16 @@ export async function saveCustomCommands(commands: CustomCommand[]): Promise<voi
     console.error("Failed to save custom commands:", e);
   }
 }
+
+/**
+ * Debounced versions of save functions to reduce file I/O operations
+ * These functions batch rapid successive saves into a single disk write
+ * after a 300ms delay, significantly improving performance during rapid state changes.
+ */
+
+// 300ms debounce delay - provides good balance between responsiveness and performance
+const SAVE_DEBOUNCE_MS = 300;
+
+export const debouncedSaveSettings = debounce(saveSettings, SAVE_DEBOUNCE_MS);
+export const debouncedSaveSessions = debounce(saveSessions, SAVE_DEBOUNCE_MS);
+export const debouncedSaveCustomCommands = debounce(saveCustomCommands, SAVE_DEBOUNCE_MS);
