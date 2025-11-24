@@ -188,7 +188,7 @@ export async function parseSSEStream(
   // Process any remaining data in buffer after stream ends
   if (buf.trim()) {
     const parts = buf.split(/\r?\n/);
-    currentEvent = processSSELines(parts, handlers, currentEvent);
+    processSSELines(parts, handlers, currentEvent);
   }
 }
 
