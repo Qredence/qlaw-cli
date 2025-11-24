@@ -1,0 +1,35 @@
+{
+  "version": "1.0.0",
+  "clients": {
+    "QLAWAPI": {
+      "language": "Python",
+      "typeAccessModifier": "Public",
+      "structuredMimeTypes": [
+        "application/json",
+        "text/plain;q=0.9",
+        "application/x-www-form-urlencoded;q=0.2",
+        "multipart/form-data;q=0.1"
+      ],
+      "clientNamespaceName": "QlawSDK",
+      "usesBackingStore": false,
+      "includeAdditionalData": true,
+      "excludeBackwardCompatible": false,
+      "disabledValidationRules": [],
+      "descriptionLocation": "./openapi.json",
+      "includePatterns": [
+        "/api",
+        "/api/v1",
+        "/api/v1/workflow",
+        "/api/v1/workflow/agents#GET",
+        "/api/v1/workflow/history",
+        "/api/v1/workflow/optimize",
+        "/api/v1/workflow/run",
+        "/api/v1/workflow/self-improve",
+        "/health"
+      ],
+      "excludePatterns": [],
+      "outputPath": "./QLAWAPI"
+    }
+  },
+  "plugins": {}
+}
