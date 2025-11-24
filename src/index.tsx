@@ -956,6 +956,25 @@ function App() {
       timestamp: new Date(),
     };
 
+    // Helper to update the last message efficiently (O(1) instead of O(n) map)
+    const updateLastMessage = (
+      contentUpdater: (currentContent: string) => string
+    ) => {
+      setMessages((prev) => {
+        if (prev.length === 0) return prev;
+        const lastIndex = prev.length - 1;
+        const lastMessage = prev[lastIndex];
+        if (lastMessage.id !== assistantMessageId) return prev;
+
+        const updated = [...prev];
+        updated[lastIndex] = {
+          ...lastMessage,
+          content: contentUpdater(lastMessage.content),
+        };
+        return updated;
+      });
+    };
+
     // Update UI immediately
     setMessages((prev) => [...prev, userMessage, assistantPlaceholder]);
     setInput("");
@@ -979,36 +998,10 @@ function App() {
         conversation: undefined,
         input: input.trim(),
         onDelta: (chunk) => {
-          // Optimize: Update only the last message instead of mapping all messages
-          setMessages((prev) => {
-            if (prev.length === 0) return prev;
-            const lastIndex = prev.length - 1;
-            const lastMessage = prev[lastIndex];
-            if (lastMessage.id !== assistantMessageId) return prev;
-            
-            const updated = [...prev];
-            updated[lastIndex] = {
-              ...lastMessage,
-              content: lastMessage.content + chunk,
-            };
-            return updated;
-          });
+          updateLastMessage((content) => content + chunk);
         },
         onError: (err) => {
-          // Optimize: Update only the last message instead of mapping all messages
-          setMessages((prev) => {
-            if (prev.length === 0) return prev;
-            const lastIndex = prev.length - 1;
-            const lastMessage = prev[lastIndex];
-            if (lastMessage.id !== assistantMessageId) return prev;
-            
-            const updated = [...prev];
-            updated[lastIndex] = {
-              ...lastMessage,
-              content: lastMessage.content + `\n\n[Error] ${err.message}`,
-            };
-            return updated;
-          });
+          updateLastMessage((content) => content + `\n\n[Error] ${err.message}`);
         },
         onDone: () => {
           setIsProcessing(false);
@@ -1019,36 +1012,10 @@ function App() {
       streamResponseFromOpenAI({
         history: historyForApi,
         onDelta: (chunk) => {
-          // Optimize: Update only the last message instead of mapping all messages
-          setMessages((prev) => {
-            if (prev.length === 0) return prev;
-            const lastIndex = prev.length - 1;
-            const lastMessage = prev[lastIndex];
-            if (lastMessage.id !== assistantMessageId) return prev;
-            
-            const updated = [...prev];
-            updated[lastIndex] = {
-              ...lastMessage,
-              content: lastMessage.content + chunk,
-            };
-            return updated;
-          });
+          updateLastMessage((content) => content + chunk);
         },
         onError: (err) => {
-          // Optimize: Update only the last message instead of mapping all messages
-          setMessages((prev) => {
-            if (prev.length === 0) return prev;
-            const lastIndex = prev.length - 1;
-            const lastMessage = prev[lastIndex];
-            if (lastMessage.id !== assistantMessageId) return prev;
-            
-            const updated = [...prev];
-            updated[lastIndex] = {
-              ...lastMessage,
-              content: lastMessage.content + `\n\n[Error] ${err.message}`,
-            };
-            return updated;
-          });
+          updateLastMessage((content) => content + `\n\n[Error] ${err.message}`);
         },
         onDone: () => {
           setIsProcessing(false);

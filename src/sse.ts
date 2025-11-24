@@ -125,37 +125,38 @@ function processSSEEvent(
 }
 
 /**
- * Process SSE lines - extracted to avoid duplication
+ * Process SSE lines and return the updated currentEvent
  */
 function processSSELines(
   lines: string[],
   handlers: SSEEventHandlers,
-  currentEvent: { value: string | null }
-): void {
+  currentEvent: string | null
+): string | null {
   for (const line of lines) {
     if (line.startsWith("event:")) {
-      currentEvent.value = line.slice(6).trim();
+      currentEvent = line.slice(6).trim();
     } else if (line.startsWith("data:")) {
       const jsonStr = line.slice(5).trim();
       if (jsonStr === "[DONE]") {
-        currentEvent.value = null;
+        currentEvent = null;
         continue;
       }
       try {
         const payload = jsonStr ? JSON.parse(jsonStr) : null;
-        processSSEEvent(currentEvent.value, payload, handlers);
+        processSSEEvent(currentEvent, payload, handlers);
         // Reset currentEvent after completion signal
-        if (currentEvent.value === "response.completed") {
-          currentEvent.value = null;
+        if (currentEvent === "response.completed") {
+          currentEvent = null;
         }
       } catch (e: any) {
         // Ignore parse errors for keep-alive/comment lines
       }
     } else if (line.trim() === "") {
       // End of event
-      currentEvent.value = null;
+      currentEvent = null;
     }
   }
+  return currentEvent;
 }
 
 /**
@@ -168,8 +169,7 @@ export async function parseSSEStream(
 ): Promise<void> {
   const decoder = new TextDecoder();
   let buf = "";
-  // Use object wrapper to allow mutation in helper function
-  const currentEvent = { value: null as string | null };
+  let currentEvent: string | null = null;
 
   // SSE parsing: events separated by blank lines; each event has optional "event:" and one or more "data:" lines
   while (true) {
@@ -182,7 +182,7 @@ export async function parseSSEStream(
     // Keep the last partial line in buffer
     buf = parts.pop() || "";
 
-    processSSELines(parts, handlers, currentEvent);
+    currentEvent = processSSELines(parts, handlers, currentEvent);
   }
 
   // Process any remaining data in buffer after stream ends
