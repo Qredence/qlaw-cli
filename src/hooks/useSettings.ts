@@ -141,12 +141,12 @@ export function useSettings(options: UseSettingsOptions): UseSettingsReturn {
             id: "theme",
             label: "Theme",
             value: settings.theme === "dark" ? "Dark" : settings.theme === "light" ? "Light" : "Dracula",
-            description: "Toggle dark/light palette",
+            description: "Cycle through dark → light → dracula themes",
             type: "toggle" as const,
             onActivate: () =>
               setSettings((prev) => ({
                 ...prev,
-                theme: prev.theme === "dark" ? "light" : "dark",
+                theme: prev.theme === "dark" ? "light" : prev.theme === "light" ? "dracula" : "dark",
               })),
           },
           {
