@@ -263,6 +263,25 @@ function App() {
       timestamp: new Date(),
     };
 
+    // Helper to update the last message efficiently (reduces per-element overhead vs O(n) map)
+    const updateLastMessage = (
+      contentUpdater: (currentContent: string) => string
+    ) => {
+      setMessages((prev) => {
+        if (prev.length === 0) return prev;
+        const lastIndex = prev.length - 1;
+        const lastMessage = prev[lastIndex];
+        if (lastMessage.id !== assistantMessageId) return prev;
+
+        const updated = [...prev];
+        updated[lastIndex] = {
+          ...lastMessage,
+          content: contentUpdater(lastMessage.content),
+        };
+        return updated;
+      });
+    };
+
     // Update UI immediately
     setMessages((prev) => [...prev, userMessage, assistantPlaceholder]);
     setInput("");
