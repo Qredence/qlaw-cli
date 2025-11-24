@@ -47,4 +47,10 @@ export function buildResponsesInput(history: Message[]): string {
   lines.push("Assistant:");
   return lines.join("\n\n");
 }
-
+export function getOpenAIEnv() {
+  return {
+    baseUrl: process.env.OPENAI_BASE_URL,
+    apiKey: process.env.OPENAI_API_KEY,
+    model: process.env.OPENAI_MODEL,
+  } as const;
+}

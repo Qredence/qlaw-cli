@@ -4,13 +4,7 @@
  */
 
 import type { Message } from "../types.ts";
-import {
-  OPENAI_BASE_URL,
-  OPENAI_API_KEY,
-  OPENAI_MODEL,
-  getAuthHeader,
-  buildResponsesInput,
-} from "../api.ts";
+import { getAuthHeader, buildResponsesInput, getOpenAIEnv } from "../api.ts";
 import { parseSSEStream } from "../sse.ts";
 import { formatRequestInfoForDisplay } from "../af.ts";
 
@@ -30,7 +24,8 @@ export async function streamResponseFromOpenAI(params: {
   const { history, callbacks } = params;
   const { onDelta, onError, onDone } = callbacks;
 
-  if (!OPENAI_BASE_URL || !OPENAI_API_KEY || !OPENAI_MODEL) {
+  const { baseUrl, apiKey, model } = getOpenAIEnv();
+  if (!baseUrl || !apiKey || !model) {
     onError(
       new Error("Missing OPENAI_BASE_URL, OPENAI_API_KEY, or OPENAI_MODEL")
     );
@@ -39,18 +34,18 @@ export async function streamResponseFromOpenAI(params: {
   }
 
   try {
-    const authHeaders = getAuthHeader(OPENAI_BASE_URL, OPENAI_API_KEY);
+    const authHeaders = getAuthHeader(baseUrl, apiKey);
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
       Accept: "text/event-stream",
       ...authHeaders,
     };
 
-    const res = await fetch(`${OPENAI_BASE_URL.replace(/\/$/, "")}/responses`, {
+    const res = await fetch(`${baseUrl.replace(/\/$/, "")}/responses`, {
       method: "POST",
       headers,
       body: JSON.stringify({
-        model: OPENAI_MODEL,
+        model,
         input: buildResponsesInput(history),
         stream: true,
       }),
@@ -81,4 +76,3 @@ export async function streamResponseFromOpenAI(params: {
     onDone();
   }
 }
-

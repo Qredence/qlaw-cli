@@ -70,6 +70,7 @@ export function useInputMode(
             ? "Custom command"
             : getBuiltInDescription(m.key) || ""),
         kind: customKeys.has(m.key) ? "custom-command" : "command",
+        score: m.score,
       }));
       setSuggestions(mapped);
       setSelectedSuggestionIndex(0);
@@ -86,6 +87,7 @@ export function useInputMode(
         label: m.key,
         description: m.description,
         kind: "mention",
+        score: m.score,
       }));
       setSuggestions(mapped);
       setSelectedSuggestionIndex(0);
@@ -135,4 +137,3 @@ export function useInputMode(
     inputAreaPaddingTop,
   };
 }
-

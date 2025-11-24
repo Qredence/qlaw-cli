@@ -141,3 +141,21 @@ Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for details.
 [0.1.3]: https://github.com/qredence/qlaw-cli/releases/tag/v0.1.3
 [0.1.0]: https://github.com/qredence/qlaw-cli/releases/tag/v0.1.0
 [0.0.1]: https://github.com/qredence/qlaw-cli/releases/tag/v0.0.1
+## [0.1.5] - 2025-11-24
+
+### Changed
+
+- Standardized package management on Bun; removed `package-lock.json`
+- Fixed CI cache key to track `bun.lock`
+- Added `bridge.db` to `.gitignore` and removed tracked artifact
+- Extracted input UI helpers to `src/uiHelpers.ts` for cleaner composition
+
+### Removed
+
+- Dropped unused `applicationinsights` dependency
+
+### Docs
+
+- Updated README version badge to 0.1.5
+- Refreshed ARCHITECTURE.md to reflect services and AF bridge flow
+- Added release notes for v0.1.5

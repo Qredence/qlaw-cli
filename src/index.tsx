@@ -15,11 +15,12 @@ import { formatMessageWithMentions } from "./mentionHandlers.ts";
 import { createStdoutWithDimensions } from "./utils.ts";
 import { SessionList } from "./components/SessionList.tsx";
 import { SettingsMenu } from "./components/SettingsMenu.tsx";
-import { Header } from "./components/Header.tsx";
+// Header component not used
 import { MessageList } from "./components/MessageList.tsx";
 import { InputArea } from "./components/InputArea.tsx";
 import { WelcomeScreen } from "./components/WelcomeScreen.tsx";
 import { SuggestionList } from "./components/SuggestionList.tsx";
+import { getSuggestionFooter, getInputPlaceholder, getInputHint } from "./uiHelpers.ts";
 import { PromptOverlay } from "./components/PromptOverlay.tsx";
 import { StatusLine } from "./components/StatusLine.tsx";
 
@@ -286,29 +287,11 @@ function App() {
   // Computed values
   const showWelcome = messages.length === 0;
 
-  const suggestionFooter = useMemo(() => {
-    if (currentInputMode === "command")
-      return "↑↓ navigate · tab autocomplete · enter run";
-    if (currentInputMode === "mention")
-      return "↑↓ navigate · tab autocomplete · enter insert";
-    return "";
-  }, [currentInputMode]);
+  const suggestionFooter = useMemo(() => getSuggestionFooter(currentInputMode), [currentInputMode]);
 
-  const inputPlaceholder = useMemo(() => {
-    if (currentInputMode === "command") return "Type a command name…";
-    if (currentInputMode === "mention") return "Select a mention type…";
-    return mode === "workflow"
-      ? "Guide your agents…  (type / for commands · @ for context)"
-      : "Ask a question…  (type / for commands · @ for context)";
-  }, [currentInputMode, mode]);
+  const inputPlaceholder = useMemo(() => getInputPlaceholder(currentInputMode, mode), [currentInputMode, mode]);
 
-  const inputHint = useMemo(() => {
-    if (currentInputMode === "command")
-      return "↩ enter to run · tab autocomplete · esc cancel";
-    if (currentInputMode === "mention")
-      return "↑↓ choose mention · tab autocomplete · enter insert";
-    return "enter send · shift+enter newline · esc clear";
-  }, [currentInputMode]);
+  const inputHint = useMemo(() => getInputHint(currentInputMode), [currentInputMode]);
 
   return (
     <box
@@ -316,20 +299,15 @@ function App() {
       flexGrow={1}
       style={{ backgroundColor: COLORS.bg.primary }}
     >
-      {/* Header */}
-      <Header
-        mode={mode}
-        bridgeUrl={settings.afBridgeBaseUrl}
-        colors={COLORS}
-      />
+      {/* Header removed */}
 
       {/* Main Content Area */}
       <scrollbox
         ref={scrollBoxRef}
         style={{
           flexGrow: 1,
-          paddingLeft: 2,
-          paddingRight: 2,
+          paddingLeft: 1,
+          paddingRight: 1,
           paddingTop: 1,
           paddingBottom: 1,
           backgroundColor: COLORS.bg.primary,
@@ -386,15 +364,14 @@ function App() {
       {/* Input Area */}
       <box
         style={{
-          backgroundColor: COLORS.bg.primary,
-          border: true,
-          borderColor: COLORS.border,
-          paddingLeft: 2,
-          paddingRight: 2,
-          paddingTop: inputAreaPaddingTop,
+          backgroundColor: "transparent",
+          border: false,
+          paddingLeft: 0,
+          paddingRight: 0,
+          paddingTop: 0,
           paddingBottom: 0,
           flexDirection: "column",
-          minHeight: inputAreaMinHeight,
+          minHeight: 1.5,
           flexShrink: 0,
         }}
       >

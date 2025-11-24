@@ -13,7 +13,7 @@ export interface Session {
   updatedAt: Date;
 }
 
-export type ThemeName = "dark" | "light";
+export type ThemeName = "dark" | "light" | "dracula";
 
 export type Action = "nextSuggestion" | "prevSuggestion" | "autocomplete";
 
@@ -70,6 +70,7 @@ export type UISuggestion = {
   label: string;
   description?: string;
   kind: "command" | "custom-command" | "mention";
+  score?: number;
 };
 
 export type Prompt =

@@ -33,15 +33,16 @@ export function InputArea({
   return (
     <box
       style={{
-        border: true,
-        borderColor: borderColor,
-        backgroundColor: colors.bg.secondary,
-        padding: 1,
+        border: false,
+        paddingTop: 0,
+        paddingBottom: 0,
+        paddingLeft: 0,
+        paddingRight: 0,
         flexDirection: "column",
         flexShrink: 0,
       }}
     >
-      <box style={{ flexDirection: "row", alignItems: "center", height: 1 }}>
+      <box style={{ flexDirection: "row", alignItems: "center", height: 2 }}>
         <text
           content={
             inputMode === "command" ? "/" : inputMode === "mention" ? "@" : "> "
@@ -60,8 +61,10 @@ export function InputArea({
           focused={!isProcessing}
           style={{
             flexGrow: 1,
-            backgroundColor: colors.bg.secondary,
-            focusedBackgroundColor: colors.bg.secondary,
+            height: 2,
+            minHeight: 2,
+            backgroundColor: "transparent",
+            focusedBackgroundColor: "transparent",
             textColor: colors.text.primary,
             focusedTextColor: colors.text.primary,
             placeholderColor: colors.text.dim,
@@ -69,7 +72,7 @@ export function InputArea({
           }}
         />
       </box>
-      <box style={{ marginTop: 1, justifyContent: "space-between" }}>
+      <box style={{ marginTop: 0.5, justifyContent: "space-between" }}>
         <text
           content={hint}
           style={{ fg: colors.text.dim, attributes: TextAttributes.DIM }}

@@ -36,10 +36,10 @@ export function StatusLine({
     const bridgePart =
       mode === "workflow"
         ? settings.afBridgeBaseUrl
-          ? "Workflow · AF bridge ready"
-          : "Workflow · AF bridge not set"
-        : "Standard";
-    return `Mode: ${bridgePart} · Theme: ${settings.theme} · /help for tips`;
+          ? "Workflow • AF bridge ready"
+          : "Workflow • AF bridge not set"
+        : "Standard • Set OPENAI_API_KEY to enable streaming";
+    return `Mode: ${bridgePart} • Theme: ${settings.theme} • /help for tips`;
   })();
 
   const rightContent = isProcessing
@@ -49,7 +49,7 @@ export function StatusLine({
     : "";
 
   return (
-    <box style={{ justifyContent: "space-between", alignItems: "center" }}>
+    <box style={{ justifyContent: "space-between", alignItems: "center", marginTop: 0 }}>
       <text
         content={leftContent}
         style={{ fg: colors.text.dim, attributes: TextAttributes.DIM }}
@@ -61,4 +61,3 @@ export function StatusLine({
     </box>
   );
 }
-

@@ -103,13 +103,12 @@ export function SuggestionList({
             attributes: TextAttributes.BOLD,
           }}
         />
-        <text
-          content={`${selectedIndex + 1}/${suggestions.length}`}
-          style={{
-            fg: colors.text.dim,
-            attributes: TextAttributes.DIM,
-          }}
-        />
+        <box>
+          <text
+            content={`${selectedIndex + 1}/${suggestions.length}`}
+            style={{ fg: colors.text.dim, attributes: TextAttributes.DIM }}
+          />
+        </box>
       </box>
 
       <box flexDirection="column">
@@ -165,14 +164,18 @@ export function SuggestionList({
                   />
                 )}
               </box>
-              <text
-                content={kindLabel}
-                style={{
-                  fg: colors.text.tertiary,
-                  attributes: TextAttributes.DIM,
-                  marginLeft: 2,
-                }}
-              />
+              <box style={{ flexDirection: "row" }}>
+                {typeof (s as any).score === "number" && (
+                  <text
+                    content={`score ${(s as any).score}`}
+                    style={{ fg: colors.text.tertiary, attributes: TextAttributes.DIM, marginRight: 2 }}
+                  />
+                )}
+                <text
+                  content={kindLabel}
+                  style={{ fg: colors.text.tertiary, attributes: TextAttributes.DIM, marginLeft: 2 }}
+                />
+              </box>
             </box>
           );
         })}
