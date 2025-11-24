@@ -1,5 +1,5 @@
 import { expect, test, describe } from "bun:test";
-import { getTheme, DARK, LIGHT, DRACULA } from "../src/themes";
+import { getTheme, DRACULA } from "../src/themes";
 import { handleThemeCommand } from "../src/commandHandlers";
 
 describe("theme cycling", () => {

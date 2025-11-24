@@ -1,5 +1,5 @@
 import { TextAttributes, type TextareaRenderable } from "@opentui/core";
-import { createElement, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useKeyboard, useOnResize, useRenderer, useTerminalDimensions } from "@opentui/react";
 import type { ThemeTokens } from "../themes";
 

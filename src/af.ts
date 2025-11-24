@@ -53,11 +53,11 @@ export function parseRequestInfoEvent(payload: unknown): PendingRequest | null {
     if (!ri?.request_id) return null;
     
     const conversation = Array.isArray(ri.data?.conversation) 
-      ? ri.data.conversation.filter((m): m is ConversationMessage => 
-          typeof m === 'object' && m !== null && 
-          typeof (m as ConversationMessage).role === 'string' && 
-          typeof (m as ConversationMessage).text === 'string'
-        )
+      ? ri.data.conversation.filter((m): m is ConversationMessage => {
+          if (typeof m !== 'object' || m === null) return false;
+          const { role, text } = m as ConversationMessage;
+          return typeof role === 'string' && typeof text === 'string';
+        })
       : [];
     
     return {

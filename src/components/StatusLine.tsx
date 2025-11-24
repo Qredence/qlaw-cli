@@ -38,7 +38,7 @@ export function StatusLine({
         ? settings.afBridgeBaseUrl
           ? "Workflow • AF bridge ready"
           : "Workflow • AF bridge not set"
-        : "Standard • Set OPENAI_API_KEY to enable streaming";
+        : "Standard • Configure OpenAI settings to enable streaming";
     return `Mode: ${bridgePart} • Theme: ${settings.theme} • /help for tips`;
   })();
 

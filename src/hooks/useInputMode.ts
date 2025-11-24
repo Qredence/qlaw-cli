@@ -3,7 +3,7 @@
  * Handles command/mention detection and suggestion generation
  */
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import type { InputMode, UISuggestion, CustomCommand } from "../types.ts";
 import { fuzzyMatch } from "../suggest.ts";
 import {
