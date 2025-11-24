@@ -29,6 +29,9 @@ const MAX_VISIBLE_SUGGESTIONS = 8;
 function App() {
   const renderer = useRenderer();
   const scrollBoxRef = useRef<any>(null);
+  const [isAtBottom, setIsAtBottom] = useState(true);
+  const [showNewMessagesIndicator, setShowNewMessagesIndicator] = useState(false);
+  const initialLoadDoneRef = useRef(false);
 
   // Core application state
   const appState = useAppState();
@@ -119,14 +122,21 @@ function App() {
     }
   }, [prompt]);
 
-  // Auto-scroll to bottom when new messages arrive if enabled
+  // Auto-scroll behavior: initial load and on append when near bottom
   useEffect(() => {
-    if (scrollBoxRef.current && messages.length > 0 && settings.autoScroll) {
-      setTimeout(() => {
-        scrollBoxRef.current?.scrollToBottom?.();
-      }, 0);
+    if (!scrollBoxRef.current || messages.length === 0) return;
+    if (!settings.autoScroll) return;
+    const last = messages[messages.length - 1];
+    const isInitial = !initialLoadDoneRef.current;
+    const shouldScroll = isInitial || isAtBottom;
+    if (shouldScroll) {
+      setTimeout(() => { scrollBoxRef.current?.scrollToBottom?.(); }, 0);
+      setShowNewMessagesIndicator(false);
+      initialLoadDoneRef.current = true;
+    } else {
+      setShowNewMessagesIndicator(true);
     }
-  }, [messages, settings.autoScroll]);
+  }, [messages, settings.autoScroll, isAtBottom]);
 
   // Keyboard shortcuts
   useKeyboardShortcuts({
@@ -304,6 +314,18 @@ function App() {
       {/* Main Content Area */}
       <scrollbox
         ref={scrollBoxRef}
+        stickyScroll
+        stickyStart="bottom"
+        verticalScrollbarOptions={{
+          onChange: () => {
+            try {
+              const el = scrollBoxRef.current;
+              const d = (el?.scrollHeight ?? 0) - (el?.scrollTop ?? 0) - (el?.viewportHeight ?? 0);
+              setIsAtBottom(d <= 2);
+              if (d <= 2) setShowNewMessagesIndicator(false);
+            } catch {}
+          },
+        }}
         style={{
           flexGrow: 1,
           paddingLeft: 1,
@@ -375,6 +397,29 @@ function App() {
           flexShrink: 0,
         }}
       >
+        {showNewMessagesIndicator && settings.autoScroll && (
+          <box style={{ justifyContent: "flex-end", paddingLeft: 1, paddingRight: 1 }}>
+            <box
+              style={{
+                backgroundColor: COLORS.bg.hover,
+                border: true,
+                borderColor: COLORS.border,
+                paddingLeft: 1,
+                paddingRight: 1,
+                paddingTop: 0,
+                paddingBottom: 0,
+              }}
+            >
+              <text content="New messages" style={{ fg: COLORS.text.secondary }} />
+              <text content="  •  " style={{ fg: COLORS.text.dim }} />
+              <text
+                content="Scroll to bottom"
+                style={{ fg: COLORS.text.primary }}
+                onClick={() => scrollBoxRef.current?.scrollToBottom?.()}
+              />
+            </box>
+          </box>
+        )}
         {/* Command/Mention Suggestions Dropdown */}
         {showSuggestionPanel && (
           <SuggestionList

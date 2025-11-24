@@ -84,21 +84,99 @@ export function validateAgentParams(values: Record<string, any>, schema: Validat
   return { valid, errors };
 }
 
-export function initAutoScroll(container: HTMLElement) {
+export function initAutoScroll(
+  container: HTMLElement,
+  opts?: { enabled?: boolean; durationMs?: number; threshold?: number; includeUI?: boolean }
+) {
   let atBottom = true;
-  const threshold = 8;
+  let enabled = opts?.enabled ?? true;
+  const threshold = Math.max(0, opts?.threshold ?? 8);
+
   const check = () => {
     const d = container.scrollHeight - container.scrollTop - container.clientHeight;
     atBottom = d <= threshold;
   };
-  const toBottom = () => {
-    try { container.scrollTo({ top: container.scrollHeight, behavior: "smooth" }); } catch { container.scrollTop = container.scrollHeight; }
+
+  const animateTo = (targetTop: number, durationMs: number) => {
+    if (durationMs <= 0) { container.scrollTop = targetTop; return; }
+    const startTop = container.scrollTop;
+    const delta = targetTop - startTop;
+    const start = Date.now();
+    const step = () => {
+      const t = Math.min(1, (Date.now() - start) / durationMs);
+      const eased = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+      container.scrollTop = Math.round(startTop + delta * eased);
+      if (t < 1) requestAnimationFrame(step);
+    };
+    try { requestAnimationFrame(step); } catch { container.scrollTop = targetTop; }
   };
-  container.addEventListener("scroll", () => check());
-  const onAppend = () => { if (atBottom) toBottom(); };
-  const onResize = () => { check(); if (atBottom) toBottom(); };
+
+  const toBottom = (duration?: number) => {
+    const target = container.scrollHeight;
+    const d = duration ?? opts?.durationMs ?? 300;
+    try {
+      if (!d) { container.scrollTop = target; }
+      else { animateTo(target, d); }
+    } catch {
+      container.scrollTop = target;
+    }
+  };
+
+  const onScroll = () => check();
+  container.addEventListener("scroll", onScroll);
+
+  const onAppend = () => { if (enabled && atBottom) toBottom(); };
+  const onResize = () => { check(); if (enabled && atBottom) toBottom(); };
+  const onInit = () => { check(); if (enabled) toBottom(); };
+
   try { window.addEventListener("resize", onResize); } catch {}
-  return { onAppend, onResize, isAtBottom: () => atBottom };
+
+  let ui: { indicator?: HTMLElement; button?: HTMLElement } | undefined;
+  if (opts?.includeUI) {
+    ui = {};
+    const indicator = document.createElement("div");
+    indicator.className = "af-indicator";
+    indicator.textContent = "New messages";
+    indicator.style.position = "sticky";
+    indicator.style.bottom = "8px";
+    indicator.style.marginLeft = "auto";
+    indicator.style.width = "max-content";
+    indicator.style.display = "none";
+
+    const button = document.createElement("button");
+    button.className = "af-button af-scroll-bottom";
+    button.textContent = "Scroll to bottom";
+    button.style.marginLeft = "8px";
+    button.onclick = () => toBottom();
+
+    const wrapper = document.createElement("div");
+    wrapper.style.display = "flex";
+    wrapper.style.alignItems = "center";
+    wrapper.style.justifyContent = "flex-end";
+    wrapper.appendChild(indicator);
+    wrapper.appendChild(button);
+
+    const updateUI = () => {
+      if (!enabled) { indicator.style.display = "none"; return; }
+      indicator.style.display = atBottom ? "none" : "inline-flex";
+    };
+
+    container.appendChild(wrapper);
+    ui.indicator = indicator;
+    ui.button = button;
+    container.addEventListener("scroll", updateUI);
+  }
+
+  const setEnabled = (v: boolean) => { enabled = !!v; };
+  const scrollToBottom = (duration?: number) => toBottom(duration);
+  const isAtBottom = () => atBottom;
+  const destroy = () => {
+    try { window.removeEventListener("resize", onResize); } catch {}
+    container.removeEventListener("scroll", onScroll);
+    if (ui?.indicator?.parentElement) ui.indicator.parentElement.remove();
+  };
+
+  return { onInit, onAppend, onResize, isAtBottom, setEnabled, scrollToBottom, destroy };
 }
 
 export function renderMessage(container: HTMLElement, payload: { role: string; text: string; timestamp: Date; meta?: Record<string, any> }) {
