@@ -104,6 +104,7 @@ export function initAutoScroll(
     const start = Date.now();
     const step = () => {
       const t = Math.min(1, (Date.now() - start) / durationMs);
+      // Ease-in-out quadratic easing for smooth animation
       const eased = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
       container.scrollTop = Math.round(startTop + delta * eased);
       if (t < 1) requestAnimationFrame(step);

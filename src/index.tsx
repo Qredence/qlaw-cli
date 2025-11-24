@@ -15,7 +15,6 @@ import { formatMessageWithMentions } from "./mentionHandlers.ts";
 import { createStdoutWithDimensions } from "./utils.ts";
 import { SessionList } from "./components/SessionList.tsx";
 import { SettingsMenu } from "./components/SettingsMenu.tsx";
-// Header component not used
 import { MessageList } from "./components/MessageList.tsx";
 import { InputArea } from "./components/InputArea.tsx";
 import { WelcomeScreen } from "./components/WelcomeScreen.tsx";
