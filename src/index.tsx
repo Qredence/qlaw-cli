@@ -979,22 +979,36 @@ function App() {
         conversation: undefined,
         input: input.trim(),
         onDelta: (chunk) => {
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === assistantMessageId
-                ? { ...m, content: m.content + chunk }
-                : m
-            )
-          );
+          // Optimize: Update only the last message instead of mapping all messages
+          setMessages((prev) => {
+            if (prev.length === 0) return prev;
+            const lastIndex = prev.length - 1;
+            const lastMessage = prev[lastIndex];
+            if (lastMessage.id !== assistantMessageId) return prev;
+            
+            const updated = [...prev];
+            updated[lastIndex] = {
+              ...lastMessage,
+              content: lastMessage.content + chunk,
+            };
+            return updated;
+          });
         },
         onError: (err) => {
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === assistantMessageId
-                ? { ...m, content: m.content + `\n\n[Error] ${err.message}` }
-                : m
-            )
-          );
+          // Optimize: Update only the last message instead of mapping all messages
+          setMessages((prev) => {
+            if (prev.length === 0) return prev;
+            const lastIndex = prev.length - 1;
+            const lastMessage = prev[lastIndex];
+            if (lastMessage.id !== assistantMessageId) return prev;
+            
+            const updated = [...prev];
+            updated[lastIndex] = {
+              ...lastMessage,
+              content: lastMessage.content + `\n\n[Error] ${err.message}`,
+            };
+            return updated;
+          });
         },
         onDone: () => {
           setIsProcessing(false);
@@ -1005,22 +1019,36 @@ function App() {
       streamResponseFromOpenAI({
         history: historyForApi,
         onDelta: (chunk) => {
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === assistantMessageId
-                ? { ...m, content: m.content + chunk }
-                : m
-            )
-          );
+          // Optimize: Update only the last message instead of mapping all messages
+          setMessages((prev) => {
+            if (prev.length === 0) return prev;
+            const lastIndex = prev.length - 1;
+            const lastMessage = prev[lastIndex];
+            if (lastMessage.id !== assistantMessageId) return prev;
+            
+            const updated = [...prev];
+            updated[lastIndex] = {
+              ...lastMessage,
+              content: lastMessage.content + chunk,
+            };
+            return updated;
+          });
         },
         onError: (err) => {
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === assistantMessageId
-                ? { ...m, content: m.content + `\n\n[Error] ${err.message}` }
-                : m
-            )
-          );
+          // Optimize: Update only the last message instead of mapping all messages
+          setMessages((prev) => {
+            if (prev.length === 0) return prev;
+            const lastIndex = prev.length - 1;
+            const lastMessage = prev[lastIndex];
+            if (lastMessage.id !== assistantMessageId) return prev;
+            
+            const updated = [...prev];
+            updated[lastIndex] = {
+              ...lastMessage,
+              content: lastMessage.content + `\n\n[Error] ${err.message}`,
+            };
+            return updated;
+          });
         },
         onDone: () => {
           setIsProcessing(false);
