@@ -29,6 +29,9 @@ import {
   saveSessions,
   loadCustomCommands,
   saveCustomCommands,
+  debouncedSaveSettings,
+  debouncedSaveSessions,
+  debouncedSaveCustomCommands,
   defaultSettings,
   defaultKeybindings,
 } from "./storage.ts";
@@ -183,6 +186,35 @@ function App() {
       )
       .slice(0, 5);
   }, [sessions]);
+
+  // Memoize command items list to avoid recreating on every input change
+  const commandItems = useMemo(() => {
+    return [
+      ...BUILT_IN_COMMANDS.map((c) => ({
+        key: c.name,
+        description: c.description,
+        keywords: c.keywords,
+      })),
+      ...customCommands.map((c) => ({
+        key: c.name,
+        description: c.description,
+      })),
+    ];
+  }, [customCommands]);
+
+  // Memoize custom command names set for faster lookups
+  const customCommandNames = useMemo(
+    () => new Set(customCommands.map((c) => c.name)),
+    [customCommands]
+  );
+
+  // Memoize mention items list (static, but good to memoize for consistency)
+  const mentionItems = useMemo(() => {
+    return MENTIONS.map((m) => ({
+      key: m.name,
+      description: m.description,
+    }));
+  }, []);
 
   type StringSettingKey = keyof Pick<
     AppSettings,
@@ -466,19 +498,19 @@ function App() {
     return () => t && clearInterval(t);
   }, [isProcessing]);
 
-  // Save settings when changed
+  // Save settings when changed (debounced to reduce file I/O)
   useEffect(() => {
-    saveSettings(settings);
+    debouncedSaveSettings(settings);
   }, [settings]);
 
-  // Save sessions when changed
+  // Save sessions when changed (debounced to reduce file I/O)
   useEffect(() => {
-    saveSessions(sessions);
+    debouncedSaveSessions(sessions);
   }, [sessions]);
 
-  // Save custom commands when changed
+  // Save custom commands when changed (debounced to reduce file I/O)
   useEffect(() => {
-    saveCustomCommands(customCommands);
+    debouncedSaveCustomCommands(customCommands);
   }, [customCommands]);
 
   // Save current session when messages change
@@ -508,27 +540,15 @@ function App() {
     if (input.startsWith("/")) {
       setInputMode("command");
       const query = input.slice(1);
-      const customKeys = new Set(customCommands.map((c) => c.name));
-      const items = [
-        ...BUILT_IN_COMMANDS.map((c) => ({
-          key: c.name,
-          description: c.description,
-          keywords: c.keywords,
-        })),
-        ...customCommands.map((c) => ({
-          key: c.name,
-          description: c.description,
-        })),
-      ];
-      const matches = fuzzyMatch(query, items, items.length);
+      const matches = fuzzyMatch(query, commandItems, commandItems.length);
       const mapped: UISuggestion[] = matches.map((m) => ({
         label: m.key,
         description:
           m.description ||
-          (customKeys.has(m.key)
+          (customCommandNames.has(m.key)
             ? "Custom command"
             : getBuiltInDescription(m.key) || ""),
-        kind: customKeys.has(m.key) ? "custom-command" : "command",
+        kind: customCommandNames.has(m.key) ? "custom-command" : "command",
       }));
       setSuggestions(mapped);
       setSelectedSuggestionIndex(0);
@@ -536,11 +556,7 @@ function App() {
     } else if (input.startsWith("@")) {
       setInputMode("mention");
       const query = input.slice(1);
-      const items = MENTIONS.map((m) => ({
-        key: m.name,
-        description: m.description,
-      }));
-      const matches = fuzzyMatch(query, items, items.length);
+      const matches = fuzzyMatch(query, mentionItems, mentionItems.length);
       const mapped: UISuggestion[] = matches.map((m) => ({
         label: m.key,
         description: m.description,
@@ -555,7 +571,7 @@ function App() {
       setSelectedSuggestionIndex(0);
       setSuggestionScrollOffset(0);
     }
-  }, [input, customCommands]);
+  }, [input, commandItems, customCommandNames, mentionItems]);
 
   useEffect(() => {
     if (selectedSuggestionIndex < suggestionScrollOffset) {
@@ -940,6 +956,25 @@ function App() {
       timestamp: new Date(),
     };
 
+    // Helper to update the last message efficiently (reduces per-element overhead vs O(n) map)
+    const updateLastMessage = (
+      contentUpdater: (currentContent: string) => string
+    ) => {
+      setMessages((prev) => {
+        if (prev.length === 0) return prev;
+        const lastIndex = prev.length - 1;
+        const lastMessage = prev[lastIndex];
+        if (lastMessage.id !== assistantMessageId) return prev;
+
+        const updated = [...prev];
+        updated[lastIndex] = {
+          ...lastMessage,
+          content: contentUpdater(lastMessage.content),
+        };
+        return updated;
+      });
+    };
+
     // Update UI immediately
     setMessages((prev) => [...prev, userMessage, assistantPlaceholder]);
     setInput("");
@@ -963,22 +998,10 @@ function App() {
         conversation: undefined,
         input: input.trim(),
         onDelta: (chunk) => {
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === assistantMessageId
-                ? { ...m, content: m.content + chunk }
-                : m
-            )
-          );
+          updateLastMessage((content) => content + chunk);
         },
         onError: (err) => {
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === assistantMessageId
-                ? { ...m, content: m.content + `\n\n[Error] ${err.message}` }
-                : m
-            )
-          );
+          updateLastMessage((content) => content + `\n\n[Error] ${err.message}`);
         },
         onDone: () => {
           setIsProcessing(false);
@@ -989,22 +1012,10 @@ function App() {
       streamResponseFromOpenAI({
         history: historyForApi,
         onDelta: (chunk) => {
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === assistantMessageId
-                ? { ...m, content: m.content + chunk }
-                : m
-            )
-          );
+          updateLastMessage((content) => content + chunk);
         },
         onError: (err) => {
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === assistantMessageId
-                ? { ...m, content: m.content + `\n\n[Error] ${err.message}` }
-                : m
-            )
-          );
+          updateLastMessage((content) => content + `\n\n[Error] ${err.message}`);
         },
         onDone: () => {
           setIsProcessing(false);

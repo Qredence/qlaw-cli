@@ -125,6 +125,41 @@ function processSSEEvent(
 }
 
 /**
+ * Process SSE lines and return the updated currentEvent
+ */
+function processSSELines(
+  lines: string[],
+  handlers: SSEEventHandlers,
+  currentEvent: string | null
+): string | null {
+  for (const line of lines) {
+    if (line.startsWith("event:")) {
+      currentEvent = line.slice(6).trim();
+    } else if (line.startsWith("data:")) {
+      const jsonStr = line.slice(5).trim();
+      if (jsonStr === "[DONE]") {
+        currentEvent = null;
+        continue;
+      }
+      try {
+        const payload = jsonStr ? JSON.parse(jsonStr) : null;
+        processSSEEvent(currentEvent, payload, handlers);
+        // Reset currentEvent after completion signal
+        if (currentEvent === "response.completed") {
+          currentEvent = null;
+        }
+      } catch (e: any) {
+        // Ignore parse errors for keep-alive/comment lines
+      }
+    } else if (line.trim() === "") {
+      // End of event
+      currentEvent = null;
+    }
+  }
+  return currentEvent;
+}
+
+/**
  * Parse SSE stream from a ReadableStream reader
  * Handles buffer management, event/data line parsing, and delegates to handlers
  */
@@ -147,60 +182,13 @@ export async function parseSSEStream(
     // Keep the last partial line in buffer
     buf = parts.pop() || "";
 
-    for (const line of parts) {
-      if (line.startsWith("event:")) {
-        currentEvent = line.slice(6).trim();
-      } else if (line.startsWith("data:")) {
-        const jsonStr = line.slice(5).trim();
-        if (jsonStr === "[DONE]") {
-          currentEvent = null;
-          continue;
-        }
-        try {
-          const payload = jsonStr ? JSON.parse(jsonStr) : null;
-          processSSEEvent(currentEvent, payload, handlers);
-          // Reset currentEvent after completion signal
-          if (currentEvent === "response.completed") {
-            currentEvent = null;
-          }
-        } catch (e: any) {
-          // Ignore parse errors for keep-alive/comment lines
-        }
-      } else if (line.trim() === "") {
-        // End of event
-        currentEvent = null;
-      }
-    }
+    currentEvent = processSSELines(parts, handlers, currentEvent);
   }
 
   // Process any remaining data in buffer after stream ends
   if (buf.trim()) {
-    // Split by lines and process all remaining lines
     const parts = buf.split(/\r?\n/);
-    for (const line of parts) {
-      if (line.startsWith("event:")) {
-        currentEvent = line.slice(6).trim();
-      } else if (line.startsWith("data:")) {
-        const jsonStr = line.slice(5).trim();
-        if (jsonStr === "[DONE]") {
-          currentEvent = null;
-          continue;
-        }
-        try {
-          const payload = jsonStr ? JSON.parse(jsonStr) : null;
-          processSSEEvent(currentEvent, payload, handlers);
-          // Reset currentEvent after completion signal
-          if (currentEvent === "response.completed") {
-            currentEvent = null;
-          }
-        } catch (e: any) {
-          // Ignore parse errors for keep-alive/comment lines
-        }
-      } else if (line.trim() === "") {
-        // End of event
-        currentEvent = null;
-      }
-    }
+    processSSELines(parts, handlers, currentEvent);
   }
 }
 
