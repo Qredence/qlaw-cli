@@ -52,7 +52,7 @@
     "typecheck": "bunx tsc -p tsconfig.json --noEmit",
     "check": "bun run typecheck && bun test",
     "build": "bun build src/index.tsx --outdir dist --minify --sourcemap --target bun",
-    "build:types": "bunx tsc -p tsconfig.json --emitDeclarationOnly --outDir dist",
+    "build:types": "bunx tsc -p tsconfig.json --declaration --emitDeclarationOnly --outDir dist",
     "bridge": "bash -lc './bridge/run.sh'",
     "cli:af": "bash -lc 'AF_BRIDGE_BASE_URL=${AF_BRIDGE_BASE_URL:-http://127.0.0.1:8081} AF_MODEL=${AF_MODEL:-multi_tier_support} bun run src/index.tsx'",
     "e2e:bridge": "bash -lc 'AF_BRIDGE_BASE_URL=${AF_BRIDGE_BASE_URL:-http://127.0.0.1:8081} AF_MODEL=${AF_MODEL:-multi_tier_support} bun run examples/e2e-bridge.ts'",

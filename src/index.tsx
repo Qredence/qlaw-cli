@@ -270,13 +270,13 @@ function App() {
       setMessages((prev) => {
         if (prev.length === 0) return prev;
         const lastIndex = prev.length - 1;
-        const lastMessage = prev[lastIndex];
+        const lastMessage = prev[lastIndex]!;
         if (lastMessage.id !== assistantMessageId) return prev;
 
         const updated = [...prev];
         updated[lastIndex] = {
           ...lastMessage,
-          content: contentUpdater(lastMessage.content),
+          content: contentUpdater(lastMessage!.content),
         };
         return updated;
       });
@@ -434,7 +434,6 @@ function App() {
               <text
                 content="Scroll to bottom"
                 style={{ fg: COLORS.text.primary }}
-                onClick={() => scrollBoxRef.current?.scrollToBottom?.()}
               />
             </box>
           </box>
