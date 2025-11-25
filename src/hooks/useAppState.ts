@@ -7,11 +7,11 @@ import { useState, useEffect, useMemo } from "react";
 import type { Message, Session, AppSettings, CustomCommand } from "../types.ts";
 import {
   loadSettings,
-  saveSettings,
   loadSessions,
-  saveSessions,
   loadCustomCommands,
-  saveCustomCommands,
+  debouncedSaveSettings,
+  debouncedSaveSessions,
+  debouncedSaveCustomCommands,
 } from "../storage.ts";
 
 export interface UseAppStateReturn {
@@ -49,19 +49,19 @@ export function useAppState(): UseAppStateReturn {
       .slice(0, 5);
   }, [sessions]);
 
-  // Save settings when changed
+  // Save settings when changed (debounced to reduce file I/O)
   useEffect(() => {
-    saveSettings(settings);
+    debouncedSaveSettings(settings);
   }, [settings]);
 
-  // Save sessions when changed
+  // Save sessions when changed (debounced to reduce file I/O)
   useEffect(() => {
-    saveSessions(sessions);
+    debouncedSaveSessions(sessions);
   }, [sessions]);
 
-  // Save custom commands when changed
+  // Save custom commands when changed (debounced to reduce file I/O)
   useEffect(() => {
-    saveCustomCommands(customCommands);
+    debouncedSaveCustomCommands(customCommands);
   }, [customCommands]);
 
   // Save current session when messages change
@@ -75,7 +75,7 @@ export function useAppState(): UseAppStateReturn {
         )
       );
     }
-  }, [messages, currentSessionId, setSessions]);
+  }, [messages, currentSessionId]);
 
   return {
     messages,
