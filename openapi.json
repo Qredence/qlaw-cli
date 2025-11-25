@@ -1,0 +1,723 @@
+{
+    "openapi": "3.1.0",
+    "info": {
+      "title": "AgenticFleet API",
+      "description": "API for orchestrating autonomous agents with DSPy and Microsoft Agent Framework. This API provides endpoints for executing workflows, managing agents, and monitoring execution.",
+      "version": "0.6.2"
+    },
+    "paths": {
+      "/health": {
+        "get": {
+          "tags": [
+            "health"
+          ],
+          "summary": "Health Check",
+          "description": "Basic health check endpoint.\n\nReturns:\n    Health status indicating the service is running",
+          "operationId": "health_check_health_get",
+          "responses": {
+            "200": {
+              "description": "Successful Response",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HealthResponse"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/health/live": {
+        "get": {
+          "tags": [
+            "health"
+          ],
+          "summary": "Liveness Check",
+          "description": "Liveness probe endpoint for Kubernetes/container orchestration.\n\nReturns:\n    Health status indicating the service is alive",
+          "operationId": "liveness_check_health_live_get",
+          "responses": {
+            "200": {
+              "description": "Successful Response",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HealthResponse"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/health/ready": {
+        "get": {
+          "tags": [
+            "health"
+          ],
+          "summary": "Readiness Check",
+          "description": "Readiness probe endpoint for Kubernetes/container orchestration.\n\nChecks if the service is ready to accept traffic by verifying:\n- Core dependencies are available\n- Configuration is loaded\n\nReturns:\n    Readiness status with individual check results",
+          "operationId": "readiness_check_health_ready_get",
+          "responses": {
+            "200": {
+              "description": "Successful Response",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ReadinessResponse"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/api/v1/workflow/run": {
+        "post": {
+          "tags": [
+            "workflow"
+          ],
+          "summary": "Run Workflow",
+          "description": "Execute a workflow for a given task.",
+          "operationId": "run_workflow_api_v1_workflow_run_post",
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowRequest"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "description": "Successful Response",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/WorkflowResponse"
+                  }
+                }
+              }
+            },
+            "422": {
+              "description": "Validation Error",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/api/v1/workflow/history": {
+        "get": {
+          "tags": [
+            "workflow"
+          ],
+          "summary": "Get History",
+          "description": "Retrieve execution history.",
+          "operationId": "get_history_api_v1_workflow_history_get",
+          "parameters": [
+            {
+              "name": "limit",
+              "in": "query",
+              "required": false,
+              "schema": {
+                "type": "integer",
+                "description": "Number of entries to return",
+                "default": 20,
+                "title": "Limit"
+              },
+              "description": "Number of entries to return"
+            },
+            {
+              "name": "min_quality",
+              "in": "query",
+              "required": false,
+              "schema": {
+                "type": "number",
+                "description": "Minimum quality score filter",
+                "default": 0,
+                "title": "Min Quality"
+              },
+              "description": "Minimum quality score filter"
+            }
+          ],
+          "responses": {
+            "200": {
+              "description": "Successful Response",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HistoryResponse"
+                  }
+                }
+              }
+            },
+            "422": {
+              "description": "Validation Error",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/api/v1/workflow/self-improve": {
+        "post": {
+          "tags": [
+            "workflow"
+          ],
+          "summary": "Trigger Self Improvement",
+          "description": "Trigger self-improvement process to learn from history.",
+          "operationId": "trigger_self_improvement_api_v1_workflow_self_improve_post",
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SelfImprovementRequest"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "description": "Successful Response",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/SelfImprovementResponse"
+                  }
+                }
+              }
+            },
+            "422": {
+              "description": "Validation Error",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/api/v1/workflow/optimize": {
+        "post": {
+          "tags": [
+            "workflow"
+          ],
+          "summary": "Start Optimization",
+          "description": "Trigger a self-improvement/optimization run (GEPA/DSPy compilation).\nRuns in background.",
+          "operationId": "start_optimization_api_v1_workflow_optimize_post",
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OptimizationRequest"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "202": {
+              "description": "Successful Response",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/OptimizationResult"
+                  }
+                }
+              }
+            },
+            "422": {
+              "description": "Validation Error",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/api/v1/workflow/optimize/{job_id}": {
+        "get": {
+          "tags": [
+            "workflow"
+          ],
+          "summary": "Get Optimization Status",
+          "description": "Check status of an optimization run.",
+          "operationId": "get_optimization_status_api_v1_workflow_optimize__job_id__get",
+          "parameters": [
+            {
+              "name": "job_id",
+              "in": "path",
+              "required": true,
+              "schema": {
+                "type": "string",
+                "title": "Job Id"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "description": "Successful Response",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/OptimizationResult"
+                  }
+                }
+              }
+            },
+            "422": {
+              "description": "Validation Error",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/api/v1/workflow/agents": {
+        "get": {
+          "tags": [
+            "workflow"
+          ],
+          "summary": "List Agents",
+          "description": "List available agents and their capabilities.",
+          "operationId": "list_agents_api_v1_workflow_agents_get",
+          "responses": {
+            "200": {
+              "description": "Successful Response",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/AgentListResponse"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "components": {
+      "schemas": {
+        "AgentInfo": {
+          "properties": {
+            "name": {
+              "type": "string",
+              "title": "Name"
+            },
+            "description": {
+              "type": "string",
+              "title": "Description"
+            },
+            "model": {
+              "type": "string",
+              "title": "Model"
+            },
+            "capabilities": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array",
+              "title": "Capabilities"
+            },
+            "status": {
+              "type": "string",
+              "title": "Status"
+            }
+          },
+          "type": "object",
+          "required": [
+            "name",
+            "description",
+            "model",
+            "capabilities",
+            "status"
+          ],
+          "title": "AgentInfo"
+        },
+        "AgentListResponse": {
+          "properties": {
+            "agents": {
+              "items": {
+                "$ref": "#/components/schemas/AgentInfo"
+              },
+              "type": "array",
+              "title": "Agents"
+            }
+          },
+          "type": "object",
+          "required": [
+            "agents"
+          ],
+          "title": "AgentListResponse"
+        },
+        "HTTPValidationError": {
+          "properties": {
+            "detail": {
+              "items": {
+                "$ref": "#/components/schemas/ValidationError"
+              },
+              "type": "array",
+              "title": "Detail"
+            }
+          },
+          "type": "object",
+          "title": "HTTPValidationError"
+        },
+        "HealthResponse": {
+          "properties": {
+            "status": {
+              "type": "string",
+              "title": "Status"
+            },
+            "version": {
+              "type": "string",
+              "title": "Version",
+              "default": "0.6.0"
+            }
+          },
+          "type": "object",
+          "required": [
+            "status"
+          ],
+          "title": "HealthResponse",
+          "description": "Health check response model."
+        },
+        "HistoryEntry": {
+          "properties": {
+            "workflow_id": {
+              "type": "string",
+              "title": "Workflow Id"
+            },
+            "task": {
+              "type": "string",
+              "title": "Task"
+            },
+            "result": {
+              "type": "string",
+              "title": "Result"
+            },
+            "quality_score": {
+              "type": "number",
+              "title": "Quality Score"
+            },
+            "total_time_seconds": {
+              "type": "number",
+              "title": "Total Time Seconds"
+            },
+            "timestamp": {
+              "type": "string",
+              "title": "Timestamp"
+            }
+          },
+          "type": "object",
+          "required": [
+            "workflow_id",
+            "task",
+            "result",
+            "quality_score",
+            "total_time_seconds",
+            "timestamp"
+          ],
+          "title": "HistoryEntry"
+        },
+        "HistoryResponse": {
+          "properties": {
+            "history": {
+              "items": {
+                "$ref": "#/components/schemas/HistoryEntry"
+              },
+              "type": "array",
+              "title": "History"
+            },
+            "total": {
+              "type": "integer",
+              "title": "Total"
+            }
+          },
+          "type": "object",
+          "required": [
+            "history",
+            "total"
+          ],
+          "title": "HistoryResponse"
+        },
+        "OptimizationRequest": {
+          "properties": {
+            "iterations": {
+              "type": "integer",
+              "title": "Iterations",
+              "description": "Number of optimization iterations",
+              "default": 3
+            },
+            "task": {
+              "type": "string",
+              "title": "Task",
+              "description": "Task to use for optimization benchmark",
+              "default": "Write a blog post about AI"
+            },
+            "compile_dspy": {
+              "type": "boolean",
+              "title": "Compile Dspy",
+              "description": "Whether to compile DSPy modules",
+              "default": true
+            }
+          },
+          "type": "object",
+          "title": "OptimizationRequest"
+        },
+        "OptimizationResult": {
+          "properties": {
+            "optimization_id": {
+              "type": "string",
+              "title": "Optimization Id"
+            },
+            "status": {
+              "type": "string",
+              "title": "Status"
+            },
+            "compiled_avg_time": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Compiled Avg Time"
+            },
+            "uncompiled_avg_time": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Uncompiled Avg Time"
+            },
+            "improvement_percentage": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Improvement Percentage"
+            },
+            "details": {
+              "additionalProperties": true,
+              "type": "object",
+              "title": "Details"
+            }
+          },
+          "type": "object",
+          "required": [
+            "optimization_id",
+            "status",
+            "compiled_avg_time",
+            "uncompiled_avg_time",
+            "improvement_percentage",
+            "details"
+          ],
+          "title": "OptimizationResult"
+        },
+        "ReadinessResponse": {
+          "properties": {
+            "ready": {
+              "type": "boolean",
+              "title": "Ready"
+            },
+            "checks": {
+              "additionalProperties": {
+                "type": "boolean"
+              },
+              "type": "object",
+              "title": "Checks"
+            }
+          },
+          "type": "object",
+          "required": [
+            "ready",
+            "checks"
+          ],
+          "title": "ReadinessResponse",
+          "description": "Readiness check response model."
+        },
+        "SelfImprovementRequest": {
+          "properties": {
+            "min_quality": {
+              "type": "number",
+              "title": "Min Quality",
+              "description": "Minimum quality score to learn from",
+              "default": 8
+            },
+            "max_examples": {
+              "type": "integer",
+              "title": "Max Examples",
+              "description": "Maximum new examples to add",
+              "default": 20
+            }
+          },
+          "type": "object",
+          "title": "SelfImprovementRequest"
+        },
+        "SelfImprovementResponse": {
+          "properties": {
+            "added_count": {
+              "type": "integer",
+              "title": "Added Count"
+            },
+            "status": {
+              "type": "string",
+              "title": "Status"
+            },
+            "details": {
+              "additionalProperties": true,
+              "type": "object",
+              "title": "Details"
+            }
+          },
+          "type": "object",
+          "required": [
+            "added_count",
+            "status",
+            "details"
+          ],
+          "title": "SelfImprovementResponse"
+        },
+        "ValidationError": {
+          "properties": {
+            "loc": {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "integer"
+                  }
+                ]
+              },
+              "type": "array",
+              "title": "Location"
+            },
+            "msg": {
+              "type": "string",
+              "title": "Message"
+            },
+            "type": {
+              "type": "string",
+              "title": "Error Type"
+            }
+          },
+          "type": "object",
+          "required": [
+            "loc",
+            "msg",
+            "type"
+          ],
+          "title": "ValidationError"
+        },
+        "WorkflowRequest": {
+          "properties": {
+            "task": {
+              "type": "string",
+              "title": "Task",
+              "description": "The task description to execute"
+            },
+            "config": {
+              "anyOf": [
+                {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Config",
+              "description": "Optional workflow configuration overrides"
+            }
+          },
+          "type": "object",
+          "required": [
+            "task"
+          ],
+          "title": "WorkflowRequest"
+        },
+        "WorkflowResponse": {
+          "properties": {
+            "workflow_id": {
+              "type": "string",
+              "title": "Workflow Id",
+              "description": "Unique ID of the workflow run"
+            },
+            "status": {
+              "type": "string",
+              "title": "Status",
+              "description": "Status of the workflow"
+            },
+            "result": {
+              "type": "string",
+              "title": "Result",
+              "description": "The final result text"
+            },
+            "quality_score": {
+              "type": "number",
+              "title": "Quality Score",
+              "description": "Quality score (0-10)"
+            },
+            "execution_time_seconds": {
+              "type": "number",
+              "title": "Execution Time Seconds",
+              "description": "Total execution time"
+            },
+            "metadata": {
+              "additionalProperties": true,
+              "type": "object",
+              "title": "Metadata"
+            }
+          },
+          "type": "object",
+          "required": [
+            "workflow_id",
+            "status",
+            "result",
+            "quality_score",
+            "execution_time_seconds"
+          ],
+          "title": "WorkflowResponse"
+        }
+      }
+    }
+  }

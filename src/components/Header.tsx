@@ -40,7 +40,7 @@ export function Header({ mode, bridgeUrl, colors }: HeaderProps) {
           style={{ fg: colors.text.accent, attributes: TextAttributes.BOLD }}
         />
         <text
-          content="Agent Framework Interface"
+          content="QLAW CLI"
           style={{ fg: colors.text.tertiary, attributes: TextAttributes.DIM }}
         />
       </box>
@@ -53,10 +53,12 @@ export function Header({ mode, bridgeUrl, colors }: HeaderProps) {
             style={{ fg: colors.text.primary, attributes: TextAttributes.BOLD }}
           />
         </box>
-        <box>
-          <text content="STATUS: " style={{ fg: colors.text.dim }} />
-          <text content={statusText} style={{ fg: statusColor }} />
-        </box>
+        {isWorkflow && (
+          <box>
+            <text content="STATUS: " style={{ fg: colors.text.dim }} />
+            <text content={statusText} style={{ fg: statusColor }} />
+          </box>
+        )}
       </box>
     </box>
   );

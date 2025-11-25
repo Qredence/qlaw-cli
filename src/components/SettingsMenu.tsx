@@ -48,6 +48,23 @@ export function SettingsMenu({
             marginBottom: 1,
           }}
         />
+        <box style={{ flexDirection: "row", gap: 2, marginBottom: 1 }}>
+          {sections.map((s, idx) => (
+            <box
+              key={`tab-${s.title}`}
+              style={{
+                border: true,
+                borderColor: idx === 0 ? colors.text.accent : colors.border,
+                backgroundColor: idx === 0 ? colors.bg.hover : colors.bg.panel,
+                paddingLeft: 1,
+                paddingRight: 1,
+                height: 1,
+              }}
+            >
+              <text content={s.title} style={{ fg: colors.text.primary }} />
+            </box>
+          ))}
+        </box>
         <text
           content="↑↓ navigate · Enter edit/toggle · Esc close"
           style={{ fg: colors.text.dim, attributes: TextAttributes.DIM }}

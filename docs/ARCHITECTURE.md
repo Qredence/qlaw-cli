@@ -9,18 +9,22 @@ This project implements an interactive terminal chat interface similar to OpenCo
 ```
 qlaw-cli/
 ├── src/
-│   ├── index.tsx          # Main application (UI and orchestration)
-│   ├── commandHandlers.ts # Command execution handlers
-│   ├── mentionHandlers.ts # Mention formatting and processing
-│   ├── commands.ts        # Command and mention definitions
-│   ├── types.ts           # TypeScript type definitions
-│   ├── storage.ts         # Persistence layer (settings, sessions)
-│   ├── api.ts             # API integration utilities
-│   ├── sse.ts             # SSE stream parsing
-│   ├── af.ts              # Agent Framework integration
-│   ├── suggest.ts         # Fuzzy matching for autocomplete
-│   ├── themes.ts          # Theme definitions
-│   └── utils.ts           # Terminal and utility functions
+│   ├── index.tsx            # Main application composition
+│   ├── services/
+│   │   ├── commandService.ts # Command dispatch and context
+│   │   └── streamingService.ts # OpenAI-style streaming orchestration
+│   ├── commandHandlers.ts   # Individual command handlers
+│   ├── mentionHandlers.ts   # Mention detection/formatting
+│   ├── commands.ts          # Command/mention registry
+│   ├── types.ts             # Shared types
+│   ├── storage.ts           # Settings/session persistence
+│   ├── api.ts               # Env and auth helpers
+│   ├── sse.ts               # SSE parsing utilities
+│   ├── af.ts                # AF request info parsing/display
+│   ├── suggest.ts           # Fuzzy autocomplete
+│   ├── themes.ts            # Theme tokens
+│   ├── uiHelpers.ts         # Input UI helper text
+│   └── utils.ts             # Terminal utilities
 ├── examples/
 │   ├── api-integration.tsx
 │   └── README.md
@@ -38,16 +42,16 @@ qlaw-cli/
 
 ### Main Chat Interface (`src/index.tsx`)
 
-The main application file (923 lines) handles UI rendering and orchestration:
+The main application file composes UI and orchestrates services:
 
 - **UI Components**: Message display, input area, overlays, suggestions
 - **State Management**: React hooks for messages, sessions, settings, input modes
 - **Event Handling**: Keyboard shortcuts, input submission, command execution
-- **Streaming Integration**: Coordinates with API modules for streaming responses
+- **Streaming Integration**: Delegates to `services/streamingService.ts`
 
-### Command Handlers (`src/commandHandlers.ts`)
+### Command System
 
-Modular command execution system:
+`services/commandService.ts` centralizes dispatch; `src/commandHandlers.ts` contains individual handlers.
 
 - Individual handler functions for each command (`handleClearCommand`, `handleHelpCommand`, etc.)
 - Command context interface for shared state access
@@ -244,7 +248,13 @@ const handleSubmit = useCallback(() => {
 - `TextAttributes.DIM` - Secondary info, timestamps
 - `TextAttributes.ITALIC` - Processing indicator
 
-## Next Steps for Production
+## AF Bridge & Streaming
+
+- `src/af.ts` parses RequestInfoEvent and formats inline overlays.
+- `src/sse.ts` normalizes SSE events from OpenAI-compatible endpoints.
+- Bridge (`bridge/`) provides example FastAPI endpoints for AF workflows.
+
+## Next Steps
 
 ### 1. Real API Integration
 

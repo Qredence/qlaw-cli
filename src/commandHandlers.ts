@@ -606,7 +606,10 @@ export function handleThemeCommand(
   context: CommandContext
 ): CommandResult {
   const { settings, setSettings } = context;
-  const newTheme: ThemeName = settings.theme === "dark" ? "light" : "dark";
+  const order: ThemeName[] = ["dark", "light", "dracula"];
+  const idx = order.indexOf(settings.theme as ThemeName);
+  const next = idx === -1 ? "dark" : order[(idx + 1) % order.length];
+  const newTheme: ThemeName = next as ThemeName;
   setSettings((prev) => ({ ...prev, theme: newTheme }));
   const systemMsg: Message = {
     id: generateUniqueId(),

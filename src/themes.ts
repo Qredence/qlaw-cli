@@ -1,4 +1,4 @@
-export type ThemeName = "dark" | "light";
+export type ThemeName = "dark" | "light" | "dracula";
 
 export interface ThemeTokens {
   bg: {
@@ -57,6 +57,27 @@ export const LIGHT: ThemeTokens = {
   error: "#C62828",
 };
 
+export const DRACULA: ThemeTokens = {
+  bg: {
+    primary: "#282A36",
+    secondary: "#2E3141",
+    panel: "#343746",
+    hover: "#3D4052",
+  },
+  text: {
+    primary: "#F8F8F2",
+    secondary: "#E2E2DC",
+    tertiary: "#CFCFC9",
+    dim: "#9EA0A6",
+    accent: "#BD93F9",
+  },
+  border: "#44475A",
+  success: "#50FA7B",
+  error: "#FF5555",
+};
+
 export function getTheme(name: ThemeName): ThemeTokens {
-  return name === "light" ? LIGHT : DARK;
+  if (name === "light") return LIGHT;
+  if (name === "dracula") return DRACULA;
+  return DARK;
 }

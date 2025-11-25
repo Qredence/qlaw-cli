@@ -1,4 +1,4 @@
-import { TextAttributes } from "@opentui/core";
+import { TextAttributes, RGBA, SyntaxStyle } from "@opentui/core";
 import type { Message } from "../types";
 import type { ThemeTokens } from "../themes";
 
@@ -15,8 +15,26 @@ export function MessageList({
   spinnerFrame,
   colors,
 }: MessageListProps) {
+  const syntaxStyle = SyntaxStyle.fromStyles({
+    keyword: { fg: RGBA.fromHex("#ff6b6b"), bold: true },
+    string: { fg: RGBA.fromHex("#51cf66") },
+    comment: { fg: RGBA.fromHex("#868e96"), italic: true },
+    number: { fg: RGBA.fromHex("#ffd43b") },
+    default: { fg: RGBA.fromHex(colors.text.primary) },
+  });
   return (
-    <box flexDirection="column" style={{ width: "100%" }}>
+    <box
+      flexDirection="column"
+      style={{
+        width: "100%",
+        flexGrow: 1,
+        justifyContent: "flex-end",
+        paddingLeft: 1,
+        paddingRight: 1,
+        paddingTop: 1,
+        paddingBottom: 1,
+      }}
+    >
       {messages.map((message, index) => {
         const isUser = message.role === "user";
         const isSystem = message.role === "system";
@@ -25,7 +43,7 @@ export function MessageList({
           return (
             <box
               key={message.id}
-              style={{ marginBottom: 1, justifyContent: "center" }}
+              style={{ marginBottom: 1, justifyContent: "flex-start" }}
             >
               <text
                 content={`[ ${message.content} ]`}
@@ -41,23 +59,32 @@ export function MessageList({
             flexDirection="column"
             style={{
               marginBottom: 1,
-              alignItems: isUser ? "flex-end" : "flex-start",
+              alignItems: "flex-start",
             }}
           >
             <box
               style={{
                 backgroundColor: isUser ? colors.bg.hover : "transparent",
                 padding: 1,
-                border: !isUser,
+                border: true,
                 borderColor: colors.border,
               }}
             >
-              <text
-                content={message.content}
-                style={{
-                  fg: isUser ? colors.text.primary : colors.text.secondary,
-                }}
-              />
+              {message.content.includes("```") ? (
+                (() => {
+                  const m = message.content.match(/```(\w+)?\n([\s\S]*?)```/);
+                  const code = m ? m[2] : message.content.replace(/```/g, "");
+                  const ft = m && m[1] ? m[1] : "plaintext";
+                  return (
+                    <code content={code} filetype={ft} syntaxStyle={syntaxStyle} />
+                  );
+                })()
+              ) : (
+                <text
+                  content={message.content}
+                  style={{ fg: isUser ? colors.text.primary : colors.text.secondary }}
+                />
+              )}
             </box>
             <text
               content={
@@ -73,8 +100,6 @@ export function MessageList({
                 fg: colors.text.dim,
                 attributes: TextAttributes.DIM,
                 marginTop: 0,
-                marginLeft: isUser ? 0 : 1,
-                marginRight: isUser ? 1 : 0,
               }}
             />
           </box>

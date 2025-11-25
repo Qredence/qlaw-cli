@@ -39,10 +39,21 @@ export function SessionList({
             marginBottom: 1,
           }}
         />
+        <box style={{ marginBottom: 1 }}>
+          <input
+            placeholder="Search sessions…"
+            focused={true}
+            style={{
+              backgroundColor: colors.bg.secondary,
+              textColor: colors.text.primary,
+              placeholderColor: colors.text.dim,
+            }}
+          />
+        </box>
         {recentSessions.length === 0 ? (
           <text
-            content="No saved sessions yet. Start chatting to build history."
-            style={{ fg: colors.text.tertiary }}
+          content="No saved sessions yet. Start chatting to build history."
+          style={{ fg: colors.text.tertiary }}
           />
         ) : (
           recentSessions.map((session, idx) => {
@@ -85,7 +96,7 @@ export function SessionList({
           })
         )}
         <text
-          content={"\n↑↓ select · enter resume · esc close"}
+          content={"\n↑↓ select · enter resume · r rename · d delete · esc close"}
           style={{
             fg: colors.text.dim,
             attributes: TextAttributes.DIM,

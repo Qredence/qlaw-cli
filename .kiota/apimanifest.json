@@ -1,0 +1,39 @@
+{
+  "applicationName": "application",
+  "apiDependencies": {
+    "QLAWAPI": {
+      "apiDescriptionUrl": "./openapi.json",
+      "apiDeploymentBaseUrl": "/",
+      "requests": [
+        {
+          "method": "GET",
+          "uriTemplate": "health"
+        },
+        {
+          "method": "POST",
+          "uriTemplate": "api/v1/workflow/run"
+        },
+        {
+          "method": "GET",
+          "uriTemplate": "api/v1/workflow/history"
+        },
+        {
+          "method": "POST",
+          "uriTemplate": "api/v1/workflow/self-improve"
+        },
+        {
+          "method": "POST",
+          "uriTemplate": "api/v1/workflow/optimize"
+        },
+        {
+          "method": "GET",
+          "uriTemplate": "api/v1/workflow/agents"
+        }
+      ],
+      "extensions": {
+        "x-ms-kiota-hash": "5296E178EFD62E52B77F3CA77894C6C266E35E228EEB633EDE558B8ED9B44A29",
+        "x-ms-kiota-version": "1.29.0"
+      }
+    }
+  }
+}

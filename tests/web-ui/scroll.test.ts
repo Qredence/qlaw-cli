@@ -36,5 +36,23 @@ describe("auto-scroll", () => {
     as.onAppend();
     expect(c.scrollTop).toBe(0);
   });
-});
 
+  test("respects disabled flag", () => {
+    const c = createContainer();
+    c.scrollTop = 100;
+    const as = initAutoScroll(c as any, { enabled: false });
+    as.onAppend();
+    expect(c.scrollTop).toBe(100);
+    as.setEnabled(true);
+    as.onAppend();
+    expect(c.scrollTop).toBe(200);
+  });
+
+  test("initial load scrolls to bottom", () => {
+    const c = createContainer();
+    c.scrollTop = 0;
+    const as = initAutoScroll(c as any);
+    as.onInit();
+    expect(c.scrollTop).toBe(200);
+  });
+});

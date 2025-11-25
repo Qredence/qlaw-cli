@@ -12,13 +12,13 @@ export function WelcomeScreen({ cwd, colors }: WelcomeScreenProps) {
       flexDirection="column"
       style={{
         width: "100%",
-        alignItems: "center",
-        justifyContent: "center",
+        alignItems: "flex-start",
+        justifyContent: "flex-start",
         paddingTop: 2,
       }}
     >
       <text
-        content="Welcome to QLAW CLI"
+        content="QLAW CLI - Qredence"
         style={{
           fg: colors.text.accent,
           attributes: TextAttributes.BOLD,
@@ -31,28 +31,6 @@ export function WelcomeScreen({ cwd, colors }: WelcomeScreenProps) {
       />
 
       <box style={{ flexDirection: "row" }}>
-        <box
-          flexDirection="column"
-          style={{
-            border: true,
-            borderColor: colors.border,
-            padding: 1,
-            width: 40,
-            marginRight: 2,
-          }}
-        >
-          <text
-            content="Context"
-            style={{
-              fg: colors.text.primary,
-              attributes: TextAttributes.BOLD,
-              marginBottom: 1,
-            }}
-          />
-          <text content={`CWD: ${cwd}`} style={{ fg: colors.text.dim }} />
-          <text content="Session: New" style={{ fg: colors.text.dim }} />
-        </box>
-
         <box
           flexDirection="column"
           style={{
