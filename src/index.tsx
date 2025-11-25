@@ -4,6 +4,7 @@ import { createRoot, useRenderer } from "@opentui/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getTheme } from "./themes.ts";
 import type { Message, Prompt } from "./types.ts";
+import { loadSettings } from "./storage.ts";
 import { useAppState } from "./hooks/useAppState.ts";
 import { useInputMode } from "./hooks/useInputMode.ts";
 import { useStreaming } from "./hooks/useStreaming.ts";
@@ -481,5 +482,48 @@ function App() {
 // Setup terminal with dimensions
 const stdoutWithDimensions = createStdoutWithDimensions();
 
-const renderer = await createCliRenderer({ stdout: stdoutWithDimensions });
-createRoot(renderer).render(<App />);
+const argv = process.argv.slice(2);
+const has = (flag: string) => argv.includes(flag);
+if (has("--version")) {
+  console.log("0.1.5");
+  process.exit(0);
+}
+if (has("--help")) {
+  console.log(
+    [
+      "Usage: qlaw [options]",
+      "",
+      "Options:",
+      "  --help       Show this help",
+      "  --version    Show version",
+      "  --status     Print configuration summary",
+      "",
+      "Run without options to launch the interactive TUI.",
+    ].join("\n")
+  );
+  process.exit(0);
+}
+if (has("--status")) {
+  const s = loadSettings();
+  const redacted = s.apiKey ? "****" + String(s.apiKey).slice(-4) : "(not set)";
+  console.log(
+    [
+      `Theme: ${s.theme}`,
+      `Auto-scroll: ${s.autoScroll ? "Enabled" : "Disabled"}`,
+      `Model: ${s.model ?? "(not set)"}`,
+      `Endpoint: ${s.endpoint ?? "(not set)"}`,
+      `API Key: ${redacted}`,
+      `AF Bridge: ${s.afBridgeBaseUrl ?? "(not set)"}`,
+      `AF Model: ${s.afModel ?? "(not set)"}`,
+      `Workflow Mode: ${s.workflow?.enabled ? "Enabled" : "Disabled"}`,
+    ].join("\n")
+  );
+  process.exit(0);
+}
+try {
+  const renderer = await createCliRenderer({ stdout: stdoutWithDimensions });
+  createRoot(renderer).render(<App />);
+} catch (e) {
+  console.error("Failed to start qlaw-cli:", e instanceof Error ? e.message : e);
+  process.exit(1);
+}

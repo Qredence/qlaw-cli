@@ -1,45 +1,9 @@
-# Development files
-.env
-.env.*
-!.env.example
-
-# IDE
-.vscode/
-.idea/
-
-# Build artifacts
-*.log
+src
+examples
+bridge
+docs/assets
+*.map
 *.tsbuildinfo
-
-# Tests
-__tests__/
-*.test.ts
-*.test.tsx
-*.spec.ts
-*.spec.tsx
-
-# Documentation (keep README.md)
-docs/
-DESIGN.md
-CONTRIBUTING.md
-CODE_OF_CONDUCT.md
-SECURITY.md
-
-# Git
-.git/
-.gitignore
-.gitattributes
-
-# GitHub
-.github/
-
-# Editor config
-.editorconfig
-
-# Examples
-examples/
-
-# Lock files
-bun.lock
-package-lock.json
-yarn.lock
+*.log
+.env*
+coverage
