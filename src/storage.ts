@@ -52,6 +52,7 @@ export const defaultSettings: AppSettings = {
 
 // Cache the data directory path to avoid repeated environment variable lookups
 // Note: We store both the override value and the computed result to detect env changes in tests
+// Note: This is safe in single-threaded Node.js/Bun - concurrent access is not a concern for CLI apps
 let cachedDataDir: string | null = null;
 let cachedOverrideValue: string | undefined = undefined;
 

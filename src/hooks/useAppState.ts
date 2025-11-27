@@ -43,8 +43,8 @@ export function useAppState(): UseAppStateReturn {
   const recentSessions = useMemo(() => {
     return [...sessions]
       .sort((a, b) => {
-        // Optimize: Get timestamps directly without creating new Date objects
-        // updatedAt is already a Date object from storage loading
+        // Get timestamps directly - use instanceof check to handle both Date objects
+        // from storage loading and any string values from direct JSON assignment
         const timeA = a.updatedAt instanceof Date ? a.updatedAt.getTime() : new Date(a.updatedAt).getTime();
         const timeB = b.updatedAt instanceof Date ? b.updatedAt.getTime() : new Date(b.updatedAt).getTime();
         return timeB - timeA;
