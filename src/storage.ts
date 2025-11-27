@@ -50,17 +50,36 @@ export const defaultSettings: AppSettings = {
   },
 };
 
+// Cache the data directory path to avoid repeated environment variable lookups
+// Note: We store both the override value and the computed result to detect env changes in tests
+let cachedDataDir: string | null = null;
+let cachedOverrideValue: string | undefined = undefined;
+
 // Get data directory path (~/.qlaw-cli/)
 function getDataDir(): string {
-  const override = process.env.QLAW_DATA_DIR;
-  if (override && override.trim().length > 0) {
-    return override;
+  const currentOverride = process.env.QLAW_DATA_DIR;
+  
+  // If override changed (e.g., in tests), invalidate cache
+  if (cachedDataDir !== null && currentOverride !== cachedOverrideValue) {
+    cachedDataDir = null;
+  }
+  
+  if (cachedDataDir !== null) {
+    return cachedDataDir;
+  }
+  
+  cachedOverrideValue = currentOverride;
+  
+  if (currentOverride && currentOverride.trim().length > 0) {
+    cachedDataDir = currentOverride;
+    return cachedDataDir;
   }
   const home = process.env.HOME || process.env.USERPROFILE || process.env.HOMEPATH;
   if (!home) {
     throw new Error("Could not determine home directory");
   }
-  return join(home, ".qlaw-cli");
+  cachedDataDir = join(home, ".qlaw-cli");
+  return cachedDataDir;
 }
 
 // Ensure data directory exists

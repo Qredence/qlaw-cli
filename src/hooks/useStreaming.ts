@@ -89,22 +89,29 @@ export function useStreaming(): UseStreamingReturn {
         conversation: undefined,
         input: userInput,
         onDelta: (chunk) => {
-          onMessageUpdate((prev) =>
-            prev.map((m) =>
-              m.id === assistantMessageId
-                ? { ...m, content: m.content + chunk }
-                : m
-            )
-          );
+          // Optimized: Update last message directly instead of O(n) map
+          // The assistant message is always the last message during streaming
+          onMessageUpdate((prev) => {
+            if (prev.length === 0) return prev;
+            const lastIndex = prev.length - 1;
+            const lastMessage = prev[lastIndex];
+            if (!lastMessage || lastMessage.id !== assistantMessageId) return prev;
+            const updated = [...prev];
+            updated[lastIndex] = { ...lastMessage, content: lastMessage.content + chunk };
+            return updated;
+          });
         },
         onError: (err) => {
-          onMessageUpdate((prev) =>
-            prev.map((m) =>
-              m.id === assistantMessageId
-                ? { ...m, content: m.content + `\n\n[Error] ${err.message}` }
-                : m
-            )
-          );
+          // Optimized: Update last message directly instead of O(n) map
+          onMessageUpdate((prev) => {
+            if (prev.length === 0) return prev;
+            const lastIndex = prev.length - 1;
+            const lastMessage = prev[lastIndex];
+            if (!lastMessage || lastMessage.id !== assistantMessageId) return prev;
+            const updated = [...prev];
+            updated[lastIndex] = { ...lastMessage, content: lastMessage.content + `\n\n[Error] ${err.message}` };
+            return updated;
+          });
         },
         onDone: () => {
           setIsProcessing(false);
@@ -116,22 +123,29 @@ export function useStreaming(): UseStreamingReturn {
         history: messages,
         callbacks: {
           onDelta: (chunk) => {
-            onMessageUpdate((prev) =>
-              prev.map((m) =>
-                m.id === assistantMessageId
-                  ? { ...m, content: m.content + chunk }
-                  : m
-              )
-            );
+            // Optimized: Update last message directly instead of O(n) map
+            // The assistant message is always the last message during streaming
+            onMessageUpdate((prev) => {
+              if (prev.length === 0) return prev;
+              const lastIndex = prev.length - 1;
+              const lastMessage = prev[lastIndex];
+              if (!lastMessage || lastMessage.id !== assistantMessageId) return prev;
+              const updated = [...prev];
+              updated[lastIndex] = { ...lastMessage, content: lastMessage.content + chunk };
+              return updated;
+            });
           },
           onError: (err) => {
-            onMessageUpdate((prev) =>
-              prev.map((m) =>
-                m.id === assistantMessageId
-                  ? { ...m, content: m.content + `\n\n[Error] ${err.message}` }
-                  : m
-              )
-            );
+            // Optimized: Update last message directly instead of O(n) map
+            onMessageUpdate((prev) => {
+              if (prev.length === 0) return prev;
+              const lastIndex = prev.length - 1;
+              const lastMessage = prev[lastIndex];
+              if (!lastMessage || lastMessage.id !== assistantMessageId) return prev;
+              const updated = [...prev];
+              updated[lastIndex] = { ...lastMessage, content: lastMessage.content + `\n\n[Error] ${err.message}` };
+              return updated;
+            });
           },
           onDone: () => {
             setIsProcessing(false);

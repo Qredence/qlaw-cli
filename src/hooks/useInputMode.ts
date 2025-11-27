@@ -3,7 +3,7 @@
  * Handles command/mention detection and suggestion generation
  */
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import type { InputMode, UISuggestion, CustomCommand } from "../types.ts";
 import { fuzzyMatch } from "../suggest.ts";
 import {
@@ -13,6 +13,19 @@ import {
 } from "../commands.ts";
 
 const MAX_VISIBLE_SUGGESTIONS = 8;
+
+// Pre-compute built-in command items for fuzzy matching (static data, never changes)
+const BUILT_IN_COMMAND_ITEMS = BUILT_IN_COMMANDS.map((c) => ({
+  key: c.name,
+  description: c.description,
+  keywords: c.keywords,
+}));
+
+// Pre-compute mention items for fuzzy matching (static data, never changes)
+const MENTION_ITEMS = MENTIONS.map((m) => ({
+  key: m.name,
+  description: m.description,
+}));
 
 export interface UseInputModeReturn {
   input: string;
@@ -44,32 +57,42 @@ export function useInputMode(
   const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(0);
   const [suggestionScrollOffset, setSuggestionScrollOffset] = useState(0);
 
+  // Memoize custom command items - only recompute when customCommands changes
+  const customCommandItems = useMemo(
+    () =>
+      customCommands.map((c) => ({
+        key: c.name,
+        description: c.description,
+      })),
+    [customCommands]
+  );
+
+  // Memoize the set of custom command names for fast lookup
+  const customCommandNames = useMemo(
+    () => new Set(customCommands.map((c) => c.name)),
+    [customCommands]
+  );
+
+  // Memoize combined command items (built-in + custom)
+  const allCommandItems = useMemo(
+    () => [...BUILT_IN_COMMAND_ITEMS, ...customCommandItems],
+    [customCommandItems]
+  );
+
   // Command / mention detection + fuzzy suggestions
   useEffect(() => {
     if (input.startsWith("/")) {
       setInputMode("command");
       const query = input.slice(1);
-      const customKeys = new Set(customCommands.map((c) => c.name));
-      const items = [
-        ...BUILT_IN_COMMANDS.map((c) => ({
-          key: c.name,
-          description: c.description,
-          keywords: c.keywords,
-        })),
-        ...customCommands.map((c) => ({
-          key: c.name,
-          description: c.description,
-        })),
-      ];
-      const matches = fuzzyMatch(query, items, items.length);
+      const matches = fuzzyMatch(query, allCommandItems, allCommandItems.length);
       const mapped: UISuggestion[] = matches.map((m) => ({
         label: m.key,
         description:
           m.description ||
-          (customKeys.has(m.key)
+          (customCommandNames.has(m.key)
             ? "Custom command"
             : getBuiltInDescription(m.key) || ""),
-        kind: customKeys.has(m.key) ? "custom-command" : "command",
+        kind: customCommandNames.has(m.key) ? "custom-command" : "command",
         score: m.score,
       }));
       setSuggestions(mapped);
@@ -78,11 +101,7 @@ export function useInputMode(
     } else if (input.startsWith("@")) {
       setInputMode("mention");
       const query = input.slice(1);
-      const items = MENTIONS.map((m) => ({
-        key: m.name,
-        description: m.description,
-      }));
-      const matches = fuzzyMatch(query, items, items.length);
+      const matches = fuzzyMatch(query, MENTION_ITEMS, MENTION_ITEMS.length);
       const mapped: UISuggestion[] = matches.map((m) => ({
         label: m.key,
         description: m.description,
@@ -98,7 +117,7 @@ export function useInputMode(
       setSelectedSuggestionIndex(0);
       setSuggestionScrollOffset(0);
     }
-  }, [input, customCommands]);
+  }, [input, allCommandItems, customCommandNames]);
 
   // Update scroll offset when selected index changes
   useEffect(() => {
