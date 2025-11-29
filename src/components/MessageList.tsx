@@ -31,8 +31,8 @@ export function MessageList({
         justifyContent: "flex-end",
         paddingLeft: 1,
         paddingRight: 1,
-        paddingTop: 1,
-        paddingBottom: 1,
+        paddingTop: 0,
+        paddingBottom: 0,
       }}
     >
       {messages.map((message, index) => {
@@ -65,8 +65,8 @@ export function MessageList({
             <box
               style={{
                 backgroundColor: isUser ? colors.bg.hover : "transparent",
-                padding: 1,
-                border: true,
+                padding: 0,
+                border: isUser,
                 borderColor: colors.border,
               }}
             >
