@@ -59,8 +59,14 @@ export const BUILT_IN_COMMANDS: CommandMeta[] = [
   { name: "judge", description: "Invoke the judge agent", keywords: ["decision"] },
 ];
 
+// Cache command names array to avoid recreating on every call
+let cachedCommandNames: string[] | null = null;
+
 export function getBuiltInCommandNames(): string[] {
-  return BUILT_IN_COMMANDS.map((c) => c.name);
+  if (cachedCommandNames === null) {
+    cachedCommandNames = BUILT_IN_COMMANDS.map((c) => c.name);
+  }
+  return cachedCommandNames;
 }
 
 export function getBuiltInDescription(name: string): string | undefined {

@@ -28,6 +28,14 @@ describe("commands", () => {
         expect(typeof name).toBe("string");
       });
     });
+
+    test("should return same cached array on multiple calls", () => {
+      // This test verifies the caching optimization
+      const names1 = getBuiltInCommandNames();
+      const names2 = getBuiltInCommandNames();
+      // Should return the exact same array reference due to caching
+      expect(names1).toBe(names2);
+    });
   });
 
   describe("getBuiltInDescription", () => {

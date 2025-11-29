@@ -27,6 +27,29 @@ export interface UseStreamingReturn {
 }
 
 /**
+ * Helper to create an optimized message updater that updates the last message directly.
+ * This avoids O(n) .map() operations during streaming by updating the array element directly.
+ * @param assistantMessageId - The ID of the assistant message being streamed
+ * @param onMessageUpdate - The state updater function
+ * @param contentAppend - Text to append to the message content
+ */
+function createLastMessageUpdater(
+  assistantMessageId: string,
+  onMessageUpdate: (updater: (prev: Message[]) => Message[]) => void,
+  contentAppend: string
+): void {
+  onMessageUpdate((prev) => {
+    if (prev.length === 0) return prev;
+    const lastIndex = prev.length - 1;
+    const lastMessage = prev[lastIndex];
+    if (!lastMessage || lastMessage.id !== assistantMessageId) return prev;
+    const updated = [...prev];
+    updated[lastIndex] = { ...lastMessage, content: lastMessage.content + contentAppend };
+    return updated;
+  });
+}
+
+/**
  * Manages streaming response state and logic
  */
 export function useStreaming(): UseStreamingReturn {
@@ -89,22 +112,10 @@ export function useStreaming(): UseStreamingReturn {
         conversation: undefined,
         input: userInput,
         onDelta: (chunk) => {
-          onMessageUpdate((prev) =>
-            prev.map((m) =>
-              m.id === assistantMessageId
-                ? { ...m, content: m.content + chunk }
-                : m
-            )
-          );
+          createLastMessageUpdater(assistantMessageId, onMessageUpdate, chunk);
         },
         onError: (err) => {
-          onMessageUpdate((prev) =>
-            prev.map((m) =>
-              m.id === assistantMessageId
-                ? { ...m, content: m.content + `\n\n[Error] ${err.message}` }
-                : m
-            )
-          );
+          createLastMessageUpdater(assistantMessageId, onMessageUpdate, `\n\n[Error] ${err.message}`);
         },
         onDone: () => {
           setIsProcessing(false);
@@ -116,22 +127,10 @@ export function useStreaming(): UseStreamingReturn {
         history: messages,
         callbacks: {
           onDelta: (chunk) => {
-            onMessageUpdate((prev) =>
-              prev.map((m) =>
-                m.id === assistantMessageId
-                  ? { ...m, content: m.content + chunk }
-                  : m
-              )
-            );
+            createLastMessageUpdater(assistantMessageId, onMessageUpdate, chunk);
           },
           onError: (err) => {
-            onMessageUpdate((prev) =>
-              prev.map((m) =>
-                m.id === assistantMessageId
-                  ? { ...m, content: m.content + `\n\n[Error] ${err.message}` }
-                  : m
-              )
-            );
+            createLastMessageUpdater(assistantMessageId, onMessageUpdate, `\n\n[Error] ${err.message}`);
           },
           onDone: () => {
             setIsProcessing(false);
