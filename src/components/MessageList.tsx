@@ -65,7 +65,7 @@ export function MessageList({
             <box
               style={{
                 backgroundColor: isUser ? colors.bg.hover : "transparent",
-                padding: 0,
+                padding: isUser ? 0 : 1,
                 border: isUser,
                 borderColor: colors.border,
               }}
