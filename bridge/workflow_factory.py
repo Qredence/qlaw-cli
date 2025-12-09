@@ -1,13 +1,27 @@
-from typing import Any
+from typing import Any, Optional
 from agent_framework._workflows._handoff import HandoffBuilder
 from agent_framework.openai import OpenAIChatClient
 
 
-async def create_workflow(entity_id: str) -> Any:
-    """Create a multi-tier handoff workflow akin to handoff_specialist_to_specialist.py.
+async def create_workflow(entity_id: str, conn_str: Optional[str] = None) -> Any:
+    """Create a multi-tier handoff workflow or a Foundry Agent workflow.
 
-    Replace this with your real agents/clients as needed.
+    If conn_str is provided, assumes entity_id is a Foundry Agent ID.
+    Otherwise, creates the default handoff workflow.
     """
+    if conn_str:
+        from agent_framework.azure import AzureAIAgentClient
+        from azure.identity.aio import DefaultAzureCredential
+
+        # Use Foundry Agent
+        client = AzureAIAgentClient(
+            project_endpoint=conn_str,
+            agent_id=entity_id,
+            async_credential=DefaultAzureCredential(),
+            should_cleanup_agent=False,
+        )
+        return client.create_agent(name=entity_id)
+
     client = OpenAIChatClient()
 
     # Coordinator + specialists (names must match handoff aliases)

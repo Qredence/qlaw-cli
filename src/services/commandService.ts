@@ -36,6 +36,9 @@ import {
   handleAfBridgeCommand,
   handleAfModelCommand,
   handleKeybindingsCommand,
+  handleLoginCommand,
+  handleFoundryEndpointCommand,
+  handleAgentCommand,
 } from "../commandHandlers.ts";
 
 export interface CommandServiceContext {
@@ -57,11 +60,11 @@ export interface CommandServiceContext {
 /**
  * Execute a command with the given arguments
  */
-export function executeCommand(
+export async function executeCommand(
   command: string,
   args: string | undefined,
   context: CommandServiceContext
-): CommandResult {
+): Promise<CommandResult> {
   const cmd = command.toLowerCase();
   const commandContext: CommandContext = {
     settings: context.settings,
@@ -94,6 +97,12 @@ export function executeCommand(
       return handleAfBridgeCommand(args, commandContext);
     case "af-model":
       return handleAfModelCommand(args, commandContext);
+    case "foundry-endpoint":
+      return handleFoundryEndpointCommand(args, commandContext);
+    case "login":
+      return handleLoginCommand(commandContext);
+    case "agent":
+      return handleAgentCommand(args, commandContext);
     case "keybindings":
       return handleKeybindingsCommand(args, commandContext);
     case "settings":

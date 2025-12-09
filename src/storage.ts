@@ -20,6 +20,7 @@ const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const OPENAI_MODEL = process.env.OPENAI_MODEL;
 const AF_BRIDGE_BASE_URL = process.env.AF_BRIDGE_BASE_URL;
 const AF_MODEL = process.env.AF_MODEL;
+const FOUNDRY_ENDPOINT = process.env.FOUNDRY_ENDPOINT;
 
 export const defaultSettings: AppSettings = {
   theme: "dark",
@@ -32,6 +33,7 @@ export const defaultSettings: AppSettings = {
   keybindings: defaultKeybindings,
   afBridgeBaseUrl: AF_BRIDGE_BASE_URL,
   afModel: AF_MODEL,
+  foundryEndpoint: FOUNDRY_ENDPOINT,
   workflow: {
     enabled: false,
     defaultAgents: {

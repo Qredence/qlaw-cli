@@ -36,6 +36,7 @@ export interface AppSettings {
   // Agent Framework bridge settings
   afBridgeBaseUrl?: string;
   afModel?: string;
+  foundryEndpoint?: string;
   workflow?: {
     enabled?: boolean;
     defaultAgents?: {

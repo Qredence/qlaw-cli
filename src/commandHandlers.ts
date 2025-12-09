@@ -10,6 +10,11 @@ import type {
 } from "./types.ts";
 import { generateUniqueId } from "./utils.ts";
 import { defaultKeybindings } from "./storage.ts";
+import { listAgents } from "./api.ts";
+import { exec } from "child_process";
+import { promisify } from "util";
+
+const execAsync = promisify(exec);
 
 export interface CommandContext {
   settings: AppSettings;
@@ -89,6 +94,10 @@ ai
   /api-key <key>       Set API key
   /af-bridge <url>     Set Agent Framework bridge
   /af-model <name>     Set Agent Framework model
+foundry
+  /login               Login to Azure
+  /foundry-endpoint    Set Foundry Project Endpoint
+  /agent               List and select Foundry Agent
 workflow
   /mode <standard|workflow>  Switch mode
   /workflow            Workflow controls
@@ -183,7 +192,7 @@ export function handleJudgeCommand(): CommandResult {
 }
 
 function handleSettingCommand(
-  settingKey: "model" | "endpoint" | "apiKey" | "afBridgeBaseUrl" | "afModel",
+  settingKey: "model" | "endpoint" | "apiKey" | "afBridgeBaseUrl" | "afModel" | "foundryEndpoint",
   promptMessage: string,
   confirmationFormatter: (value: string) => string,
   args: string | undefined,
@@ -307,6 +316,104 @@ export function handleAfModelCommand(
     args,
     context
   );
+}
+
+export function handleFoundryEndpointCommand(
+  args: string | undefined,
+  context: CommandContext
+): CommandResult {
+  return handleSettingCommand(
+    "foundryEndpoint",
+    "Enter Foundry Endpoint URL:",
+    (v) => `Foundry Endpoint set to: ${v}`,
+    args,
+    context
+  );
+}
+
+export async function handleLoginCommand(context: CommandContext): Promise<CommandResult> {
+    const { setMessages } = context;
+    const msg: Message = { id: generateUniqueId(), role: "system", content: "Initiating Azure login via browser...", timestamp: new Date() };
+    setMessages((prev) => [...prev, msg]);
+
+    try {
+        const { stdout } = await execAsync("az login");
+        return {
+            systemMessage: {
+                id: generateUniqueId(),
+                role: "system",
+                content: `Login successful.\n${stdout}`,
+                timestamp: new Date()
+            }
+        };
+    } catch (e: any) {
+        return {
+            systemMessage: {
+                id: generateUniqueId(),
+                role: "system",
+                content: `Login failed: ${e.message}. Ensure Azure CLI is installed (az).`,
+                timestamp: new Date()
+            }
+        };
+    }
+}
+
+export async function handleAgentCommand(
+    args: string | undefined,
+    context: CommandContext
+): Promise<CommandResult> {
+    const { settings, setSettings, setPrompt, setMessages } = context;
+    const bridgeUrl = settings.afBridgeBaseUrl;
+    const foundryEndpoint = settings.foundryEndpoint;
+
+    if (!bridgeUrl) {
+         return { systemMessage: { id: generateUniqueId(), role: "system", content: "Error: Bridge URL not set (/af-bridge)", timestamp: new Date() } };
+    }
+    if (!foundryEndpoint) {
+         return { systemMessage: { id: generateUniqueId(), role: "system", content: "Error: Foundry Endpoint not set (/foundry-endpoint)", timestamp: new Date() } };
+    }
+
+    try {
+        const msg: Message = { id: generateUniqueId(), role: "system", content: "Fetching agents...", timestamp: new Date() };
+        setMessages((prev) => [...prev, msg]);
+
+        const agents = await listAgents(bridgeUrl, foundryEndpoint);
+
+        if (agents.length === 0) {
+            return { systemMessage: { id: generateUniqueId(), role: "system", content: "No agents found.", timestamp: new Date() } };
+        }
+
+        const listStr = agents.map((a, i) => `${i + 1}. ${a.name} (${a.model}) - ID: ${a.id}`).join("\n");
+
+        setPrompt({
+            type: "input",
+            message: "Enter Agent ID (from above):",
+            onConfirm: (val) => {
+                const selected = val.trim();
+                if (selected) {
+                    setSettings(prev => ({ ...prev, afModel: selected, mode: "workflow" }));
+                    const confirmMsg: Message = {
+                         id: generateUniqueId(), role: "system", content: `Agent set to: ${selected}. Switched to Workflow mode.`, timestamp: new Date()
+                    };
+                    setMessages(prev => [...prev, confirmMsg]);
+                    setPrompt(null);
+                }
+            },
+            onCancel: () => setPrompt(null)
+        });
+
+        return {
+            systemMessage: {
+                id: generateUniqueId(),
+                role: "system",
+                content: `Foundry Agents:\n${listStr}`,
+                timestamp: new Date()
+            }
+        };
+
+    } catch (e: any) {
+        return { systemMessage: { id: generateUniqueId(), role: "system", content: `Error fetching agents: ${e.message}`, timestamp: new Date() } };
+    }
 }
 
 const ACTION_LABELS: Record<Action, string> = {
