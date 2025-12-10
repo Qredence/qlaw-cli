@@ -42,10 +42,13 @@ export function useAppState(): UseAppStateReturn {
 
   const recentSessions = useMemo(() => {
     return [...sessions]
-      .sort(
-        (a, b) =>
-          new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-      )
+      .sort((a, b) => {
+        // Get timestamps directly - use instanceof check to handle both Date objects
+        // from storage loading and any string values from direct JSON assignment
+        const timeA = a.updatedAt instanceof Date ? a.updatedAt.getTime() : new Date(a.updatedAt).getTime();
+        const timeB = b.updatedAt instanceof Date ? b.updatedAt.getTime() : new Date(b.updatedAt).getTime();
+        return timeB - timeA;
+      })
       .slice(0, 5);
   }, [sessions]);
 
@@ -67,13 +70,14 @@ export function useAppState(): UseAppStateReturn {
   // Save current session when messages change
   useEffect(() => {
     if (currentSessionId && messages.length > 0) {
-      setSessions((prev) =>
-        prev.map((s) =>
-          s.id === currentSessionId
-            ? { ...s, messages, updatedAt: new Date() }
-            : s
-        )
-      );
+      // Optimized: Find index and update directly instead of O(n) map with per-element checks
+      setSessions((prev) => {
+        const idx = prev.findIndex((s) => s.id === currentSessionId);
+        if (idx === -1) return prev;
+        const updated = [...prev];
+        updated[idx] = { ...prev[idx], messages, updatedAt: new Date() };
+        return updated;
+      });
     }
   }, [messages, currentSessionId]);
 
