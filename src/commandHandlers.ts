@@ -346,12 +346,18 @@ export async function handleLoginCommand(context: CommandContext): Promise<Comma
                 timestamp: new Date()
             }
         };
-    } catch (e: any) {
+    } catch (e: unknown) {
+        let errorMessage: string;
+        if (e instanceof Error) {
+            errorMessage = e.message;
+        } else {
+            errorMessage = String(e);
+        }
         return {
             systemMessage: {
                 id: generateUniqueId(),
                 role: "system",
-                content: `Login failed: ${e.message}. Ensure Azure CLI is installed (az).`,
+                content: `Login failed: ${errorMessage}. Ensure Azure CLI is installed (az).`,
                 timestamp: new Date()
             }
         };
