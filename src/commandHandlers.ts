@@ -417,8 +417,14 @@ export async function handleAgentCommand(
             }
         };
 
-    } catch (e: any) {
-        return { systemMessage: { id: generateUniqueId(), role: "system", content: `Error fetching agents: ${e.message}`, timestamp: new Date() } };
+    } catch (e: unknown) {
+        let errorMsg = "Unknown error";
+        if (typeof e === "object" && e !== null && "message" in e && typeof (e as { message?: unknown }).message === "string") {
+            errorMsg = (e as { message: string }).message;
+        } else if (typeof e === "string") {
+            errorMsg = e;
+        }
+        return { systemMessage: { id: generateUniqueId(), role: "system", content: `Error fetching agents: ${errorMsg}`, timestamp: new Date() } };
     }
 }
 
