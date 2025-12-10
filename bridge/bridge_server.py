@@ -12,6 +12,7 @@ import os
 from collections import defaultdict
 from contextlib import asynccontextmanager
 from typing import Any, AsyncGenerator, Dict, Optional, Tuple, Protocol, AsyncIterator
+import logging
 
 from fastapi import FastAPI, Request
 from fastapi.responses import StreamingResponse, JSONResponse
@@ -499,7 +500,8 @@ def list_agents(project_endpoint: str):
             ]
         )
     except Exception as e:
-        return JSONResponse({"error": str(e)}, status_code=500)
+        logging.error("Error listing agents: %s", e, exc_info=True)
+        return JSONResponse({"error": "An internal error has occurred."}, status_code=500)
 
 
 Base = declarative_base()
