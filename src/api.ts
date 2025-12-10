@@ -67,5 +67,9 @@ export async function listAgents(
     const text = await res.text().catch(() => "");
     throw new Error(`HTTP ${res.status} ${res.statusText}${text ? ` - ${text}` : ""}`);
   }
-  return res.json();
+  try {
+    return await res.json();
+  } catch (e) {
+    throw new Error(`Failed to parse response from ${url}: ${e instanceof Error ? e.message : String(e)}`);
+  }
 }
