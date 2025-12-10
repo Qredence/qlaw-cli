@@ -10,18 +10,20 @@ async def create_workflow(entity_id: str, conn_str: Optional[str] = None) -> Any
     Otherwise, creates the default handoff workflow.
     """
     if conn_str:
-        from agent_framework.azure import AzureAIAgentClient
-        from azure.identity.aio import DefaultAzureCredential
+        try:
+            from agent_framework.azure import AzureAIAgentClient
+            from azure.identity.aio import DefaultAzureCredential
 
-        # Use Foundry Agent
-        client = AzureAIAgentClient(
-            project_endpoint=conn_str,
-            agent_id=entity_id,
-            async_credential=DefaultAzureCredential(),
-            should_cleanup_agent=False,
-        )
-        return client.create_agent(name=entity_id)
-
+            # Use Foundry Agent
+            client = AzureAIAgentClient(
+                project_endpoint=conn_str,
+                agent_id=entity_id,
+                async_credential=DefaultAzureCredential(),
+                should_cleanup_agent=False,
+            )
+            return client.create_agent(name=entity_id)
+        except Exception as e:
+            raise ValueError(f"Failed to create Azure agent: {e}") from e
     client = OpenAIChatClient()
 
     # Coordinator + specialists (names must match handoff aliases)
