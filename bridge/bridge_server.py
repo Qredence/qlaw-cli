@@ -12,8 +12,9 @@ import os
 from collections import defaultdict
 from contextlib import asynccontextmanager
 from typing import Any, AsyncGenerator, Dict, Optional, Tuple, Protocol, AsyncIterator
+import logging
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import StreamingResponse, JSONResponse
 from pydantic import BaseModel
 from uuid import uuid4
@@ -22,7 +23,7 @@ from sqlalchemy import Column, String, DateTime, Text, create_engine, select
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 # Agent Framework imports (ensure installed/available in your Python env)
-from agent_framework import ChatMessage
+from agent_framework import ChatMessage, Role
 from agent_framework._workflows._handoff import HandoffUserInputRequest
 from agent_framework._workflows._events import (
     RequestInfoEvent,
@@ -74,7 +75,7 @@ def _get_conversation_id(conversation: Any) -> Optional[str]:
 
 
 async def _get_or_create_workflow(
-    entity_id: str, conversation_id: Optional[str]
+    entity_id: str, conversation_id: Optional[str], conn_str: Optional[str] = None
 ) -> tuple[WorkflowProtocol, str]:
     """Get or create a workflow, refreshing its last access timestamp.
 
@@ -82,7 +83,6 @@ async def _get_or_create_workflow(
     use the same conversation_id.
     """
     key = conversation_id or f"conv_{uuid4().hex[:8]}"
-    current_time = time.time()
 
     # Get or create lock for this key
     lock = _WORKFLOW_LOCKS[key]
@@ -94,11 +94,11 @@ async def _get_or_create_workflow(
         if entry:
             # Workflow exists - refresh timestamp
             wf, _ = entry
-            WORKFLOWS[key] = (wf, current_time)
+            WORKFLOWS[key] = (wf, time.time())
         else:
             # Create new workflow only if still missing after lock acquisition
-            wf = await create_workflow(entity_id)
-            WORKFLOWS[key] = (wf, current_time)
+            wf = await create_workflow(entity_id, conn_str)
+            WORKFLOWS[key] = (wf, time.time())
 
             # Enforce MAX_WORKFLOWS limit if set
             if MAX_WORKFLOWS is not None and len(WORKFLOWS) > MAX_WORKFLOWS:
@@ -126,8 +126,6 @@ def _prune_workflows(current_time: Optional[float] = None) -> None:
     ]
     for key in expired_keys:
         del WORKFLOWS[key]
-        if key in _WORKFLOW_LOCKS:
-            del _WORKFLOW_LOCKS[key]
 
     # Enforce MAX_WORKFLOWS limit if configured
     if MAX_WORKFLOWS is not None and len(WORKFLOWS) > MAX_WORKFLOWS:
@@ -135,8 +133,6 @@ def _prune_workflows(current_time: Optional[float] = None) -> None:
         num_to_evict = len(WORKFLOWS) - MAX_WORKFLOWS
         for key, _ in sorted_workflows[:num_to_evict]:
             del WORKFLOWS[key]
-            if key in _WORKFLOW_LOCKS:
-                del _WORKFLOW_LOCKS[key]
 
 
 def _evict_lru_workflow() -> None:
@@ -147,11 +143,6 @@ def _evict_lru_workflow() -> None:
     # Find the workflow with the oldest timestamp
     lru_key = min(WORKFLOWS.items(), key=lambda x: x[1][1])[0]
     del WORKFLOWS[lru_key]
-
-    # Optionally clean up the lock entry (safe to delete even if lock is in use,
-    # as coroutines hold references to the lock object itself)
-    if lru_key in _WORKFLOW_LOCKS:
-        del _WORKFLOW_LOCKS[lru_key]
 
 
 async def _cleanup_workflows() -> None:
@@ -302,9 +293,10 @@ def _sse_response(
 
 
 @app.post("/v1/responses")
-async def responses(request: OpenAIRequest):
+async def responses(request: OpenAIRequest, raw: Request):
+    conn_str = raw.headers.get("x-foundry-endpoint")
     wf, conv_id = await _get_or_create_workflow(
-        request.model, _get_conversation_id(request.conversation)
+        request.model, _get_conversation_id(request.conversation), conn_str
     )
     _ensure_workflow_row(request.model)
     _ensure_run_row(request.model, conv_id)
@@ -336,9 +328,10 @@ class SendResponsesBody(BaseModel):
 
 
 @app.post("/v1/workflows/{entity_id}/send_responses")
-async def continue_workflow(entity_id: str, body: SendResponsesBody):
+async def continue_workflow(entity_id: str, body: SendResponsesBody, raw: Request):
+    conn_str = raw.headers.get("x-foundry-endpoint")
     wf, conv_id = await _get_or_create_workflow(
-        entity_id, _get_conversation_id(body.conversation)
+        entity_id, _get_conversation_id(body.conversation), conn_str
     )
     _ensure_workflow_row(entity_id)
     _ensure_run_row(entity_id, conv_id)
@@ -482,6 +475,33 @@ def list_audit(run_id: str):
                 for a in rows
             ]
         )
+
+
+@app.get("/v1/agents")
+def list_agents(foundry_endpoint: str):
+    try:
+        from azure.ai.projects import AIProjectClient
+        from azure.identity import DefaultAzureCredential
+
+        project_client = AIProjectClient(
+            endpoint=foundry_endpoint,
+            credential=DefaultAzureCredential(),
+        )
+        agents = project_client.agents.list_agents()
+        return JSONResponse(
+            [
+                {
+                    "id": a.id,
+                    "name": a.name,
+                    "instructions": a.instructions,
+                    "model": a.model,
+                }
+                for a in agents.data
+            ]
+        )
+    except Exception as e:
+        logging.error("Error listing agents: %s", e, exc_info=True)
+        return JSONResponse({"error": "An internal error has occurred."}, status_code=500)
 
 
 Base = declarative_base()

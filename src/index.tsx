@@ -168,8 +168,8 @@ function App() {
 
   // Command execution
   const handleExecuteCommand = useCallback(
-    (command: string, args?: string) => {
-      const result = executeCommand(command, args, {
+    async (command: string, args?: string) => {
+      const result = await executeCommand(command, args, {
         settings,
         sessions,
         messages,
