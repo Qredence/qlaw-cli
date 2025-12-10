@@ -478,13 +478,13 @@ def list_audit(run_id: str):
 
 
 @app.get("/v1/agents")
-def list_agents(project_endpoint: str):
+def list_agents(foundry_endpoint: str):
     try:
         from azure.ai.projects import AIProjectClient
         from azure.identity import DefaultAzureCredential
 
         project_client = AIProjectClient(
-            endpoint=project_endpoint,
+            endpoint=foundry_endpoint,
             credential=DefaultAzureCredential(),
         )
         agents = project_client.agents.list_agents()
