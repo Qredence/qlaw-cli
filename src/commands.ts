@@ -74,13 +74,16 @@ export function getBuiltInDescription(name: string): string | undefined {
 }
 
 export interface MentionMeta {
-  name: "context" | "file" | "code" | "docs" | "coder" | "planner" | "reviewer" | "judge";
+  name: "context" | "file" | "code" | "docs" | "coder" | "planner" | "reviewer" | "judge" | "folder";
   description: string;
+  /** If true, this mention type supports path autocomplete */
+  supportsPath?: boolean;
 }
 
 export const MENTIONS: MentionMeta[] = [
   { name: "context", description: "Add context to your message" },
-  { name: "file", description: "Include a file (e.g., @file path/to/file)" },
+  { name: "file", description: "Reference a file (e.g., @file src/index.ts)", supportsPath: true },
+  { name: "folder", description: "Reference a directory (e.g., @folder src/components)", supportsPath: true },
   { name: "code", description: "Include a code snippet (e.g., @code your code here)" },
   { name: "docs", description: "Reference documentation (e.g., @docs topic)" },
   { name: "coder", description: "Route prompt to the Coder agent" },
@@ -88,3 +91,6 @@ export const MENTIONS: MentionMeta[] = [
   { name: "reviewer", description: "Route prompt to the Reviewer agent" },
   { name: "judge", description: "Route prompt to the Judge agent" },
 ];
+
+/** Mention types that support file/folder path autocomplete */
+export const PATH_MENTION_TYPES = ["file", "folder"];
