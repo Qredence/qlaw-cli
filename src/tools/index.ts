@@ -118,8 +118,8 @@ export async function executeToolCall(call: ToolCall, options: ToolExecutionOpti
         // Basic safety check for extremely dangerous command patterns
         const dangerousPatterns = [
           /rm\s+(-[rfRF]*\s*)*\/\s*$/,  // rm -rf / or rm -r / etc.
-          />\s*\/dev\/([shvx]d[a-z]|nvme\d+n\d+|mmcblk\d+)/,  // writing to disk devices (covers sda, vda, xvda, nvme, mmcblk)
-          /dd\s+.*of=\/dev\/([shvx]d[a-z]|nvme\d+n\d+|mmcblk\d+)/,  // dd to disk devices
+          />\s*\/dev\/([shvx]d[a-z]\d*|nvme\d+n\d+p?\d*|mmcblk\d+p?\d*)/,  // writing to disk devices and partitions
+          /dd\s+.*of=\/dev\/([shvx]d[a-z]\d*|nvme\d+n\d+p?\d*|mmcblk\d+p?\d*)/,  // dd to disk devices and partitions
           /mkfs/,  // filesystem formatting
           /:\(\)\s*\{/,  // fork bomb pattern (more flexible)
         ];

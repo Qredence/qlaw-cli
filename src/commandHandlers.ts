@@ -112,22 +112,22 @@ function buildEndpointSelectOptions(settings: AppSettings): PromptSelectOption[]
 
 function buildApiKeySelectOptions(): PromptSelectOption[] {
   const options: PromptSelectOption[] = [];
-  if (process.env.LITELLM_API_KEY) {
-    const key = process.env.LITELLM_API_KEY;
-    const masked = key.length > 4 ? "***" + key.slice(-4) : "***";
+  const litellmKey = process.env.LITELLM_API_KEY;
+  if (litellmKey) {
+    const masked = litellmKey.length > 4 ? "***" + litellmKey.slice(-4) : "***";
     options.push({
       name: `Use LITELLM_API_KEY (${masked})`,
       description: "Apply the LiteLLM API key from env",
-      value: process.env.LITELLM_API_KEY,
+      value: litellmKey,
     });
   }
-  if (process.env.OPENAI_API_KEY) {
-    const key = process.env.OPENAI_API_KEY;
-    const masked = key.length > 4 ? "***" + key.slice(-4) : "***";
+  const openaiKey = process.env.OPENAI_API_KEY;
+  if (openaiKey) {
+    const masked = openaiKey.length > 4 ? "***" + openaiKey.slice(-4) : "***";
     options.push({
       name: `Use OPENAI_API_KEY (${masked})`,
       description: "Apply the OpenAI API key from env",
-      value: process.env.OPENAI_API_KEY,
+      value: openaiKey,
     });
   }
   options.push({ name: "Custom…", description: "Type a custom API key", value: CUSTOM_SELECT_VALUE });
