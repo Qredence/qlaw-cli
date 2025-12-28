@@ -200,13 +200,22 @@ function handleSettingCommand(
   confirmationFormatter: (value: string) => string,
   args: string | undefined,
   context: CommandContext,
-  shouldMaskValue: boolean = false
+  options?: {
+    shouldMaskValue?: boolean;
+    placeholder?: string;
+    applyValue?: (value: string, context: CommandContext) => void;
+  }
 ): CommandResult {
-  const { settings, setSettings } = context;
+  const { settings, setSettings, setMessages, setPrompt } = context;
   const val = args?.trim();
-  
+  const applyValue =
+    options?.applyValue ||
+    ((value: string, ctx: CommandContext) => {
+      ctx.setSettings((prev) => ({ ...prev, [settingKey]: value }));
+    });
+
   if (val) {
-    setSettings((prev) => ({ ...prev, [settingKey]: val }));
+    applyValue(val, context);
     const systemMsg: Message = {
       id: generateUniqueId(),
       role: "system",
@@ -214,14 +223,50 @@ function handleSettingCommand(
       timestamp: new Date(),
     };
     return { systemMessage: systemMsg };
-  } else {
-    const currentValue = settings[settingKey] || "Not set";
-    const masked = shouldMaskValue && typeof currentValue === "string"
-      ? (currentValue ? "***" + currentValue.slice(-4) : "Not set")
-      : currentValue;
-    const msg = `${promptMessage}\nCurrent: ${masked}\nUsage: /${settingKey} <value>`;
-    return { systemMessage: { id: generateUniqueId(), role: "system", content: msg, timestamp: new Date() } };
   }
+
+  const storedValue = settings[settingKey];
+  const displayValue = storedValue || "Not set";
+  const masked =
+    options?.shouldMaskValue && typeof displayValue === "string"
+      ? displayValue
+        ? "***" + displayValue.slice(-4)
+        : "Not set"
+      : displayValue;
+
+  if (setPrompt) {
+    const defaultValue =
+      options?.shouldMaskValue || typeof storedValue !== "string"
+        ? ""
+        : storedValue;
+    setPrompt({
+      type: "input",
+      message: promptMessage,
+      defaultValue,
+      placeholder: options?.placeholder || "Type and press Enter",
+      onConfirm: (value: string) => {
+        const trimmed = value.trim();
+        if (trimmed) {
+          applyValue(trimmed, context);
+          if (setMessages) {
+            const systemMsg: Message = {
+              id: generateUniqueId(),
+              role: "system",
+              content: confirmationFormatter(trimmed),
+              timestamp: new Date(),
+            };
+            setMessages((prev) => [...prev, systemMsg]);
+          }
+        }
+        setPrompt(null);
+      },
+      onCancel: () => setPrompt(null),
+    });
+    return { shouldReturn: true };
+  }
+
+  const msg = `${promptMessage}\nCurrent: ${masked}\nUsage: /${settingKey} <value>`;
+  return { systemMessage: { id: generateUniqueId(), role: "system", content: msg, timestamp: new Date() } };
 }
 
 export function handleModelCommand(
@@ -233,7 +278,8 @@ export function handleModelCommand(
     "Enter model name:",
     (v) => `Model set to: ${v}`,
     args,
-    context
+    context,
+    { placeholder: "openai/gpt-4o-mini" }
   );
 }
 
@@ -241,21 +287,17 @@ export function handleProviderCommand(
   args: string | undefined,
   context: CommandContext
 ): CommandResult {
-  const { setSettings, settings } = context;
-  const val = args?.trim();
-  if (val) {
-    setSettings((prev) => applyProviderDefaults(prev, val));
-    const systemMsg: Message = {
-      id: generateUniqueId(),
-      role: "system",
-      content: `Provider set to: ${val} (defaults updated when available)`,
-      timestamp: new Date(),
-    };
-    return { systemMessage: systemMsg };
-  }
-  const currentValue = settings.provider || "Auto";
-  const msg = `Enter provider (openai, azure, litellm, custom):\nCurrent: ${currentValue}\nUsage: /provider <value>`;
-  return { systemMessage: { id: generateUniqueId(), role: "system", content: msg, timestamp: new Date() } };
+  return handleSettingCommand(
+    "provider",
+    "Enter provider (openai, azure, litellm, custom):",
+    (v) => `Provider set to: ${v} (defaults updated when available)`,
+    args,
+    context,
+    {
+      placeholder: "litellm",
+      applyValue: (value, ctx) => ctx.setSettings((prev) => applyProviderDefaults(prev, value)),
+    }
+  );
 }
 
 export function handleEndpointCommand(
@@ -267,7 +309,8 @@ export function handleEndpointCommand(
     "Enter API endpoint base URL:",
     (v) => `Endpoint set to: ${v}`,
     args,
-    context
+    context,
+    { placeholder: "http://localhost:4000/v1" }
   );
 }
 
@@ -281,7 +324,7 @@ export function handleApiKeyCommand(
     () => "API key updated.",
     args,
     context,
-    true
+    { shouldMaskValue: true, placeholder: "sk-..." }
   );
 }
 

@@ -56,13 +56,16 @@ export function SuggestionList({
     };
   }, [suggestions, scrollOffset, maxVisible]);
 
+  const selected = suggestions[selectedIndex];
+
   const actionHint = useMemo(() => {
-    if (inputMode === "command") return "enter run • tab autocomplete • esc cancel";
+    if (inputMode === "command") {
+      if (selected?.requiresValue) return "enter edit • tab autocomplete • esc cancel";
+      return "enter run • tab autocomplete • esc cancel";
+    }
     if (inputMode === "mention") return "enter insert • tab autocomplete • esc cancel";
     return "";
-  }, [inputMode]);
-
-  const selected = suggestions[selectedIndex];
+  }, [inputMode, selected?.requiresValue]);
 
   function splitMatch(label: string, match: string): [string, string, string] {
     if (!match) return [label, "", ""];

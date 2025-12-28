@@ -92,6 +92,7 @@ export type UISuggestion = {
   kind: "command" | "custom-command" | "mention";
   score?: number;
   keywords?: string[];
+  requiresValue?: boolean;
 };
 
 export type Prompt =
