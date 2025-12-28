@@ -5,6 +5,7 @@ import type {
   CustomCommand,
   ThemeName,
   Prompt,
+  PromptSelectOption,
   Action,
   KeySpec,
 } from "./types.ts";
@@ -16,6 +17,135 @@ import { exec } from "child_process";
 import { promisify } from "util";
 
 const execAsync = promisify(exec);
+const CUSTOM_SELECT_VALUE = "__custom__";
+const AUTO_SELECT_VALUE = "__auto__";
+
+function dedupeSelectOptions(options: PromptSelectOption[]): PromptSelectOption[] {
+  const seen = new Set<string>();
+  const deduped: PromptSelectOption[] = [];
+  for (const option of options) {
+    const key = option.name.trim();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    deduped.push(option);
+  }
+  return deduped;
+}
+
+function selectIndexForValue(options: PromptSelectOption[], value?: string): number {
+  if (!value) return 0;
+  const idx = options.findIndex((opt) => opt.value === value || opt.name === value);
+  return idx >= 0 ? idx : 0;
+}
+
+function buildModelSelectOptions(settings: AppSettings): PromptSelectOption[] {
+  const options: PromptSelectOption[] = [];
+  if (settings.model) {
+    options.push({ name: settings.model, description: "Current value", value: settings.model });
+  }
+  if (process.env.LITELLM_MODEL) {
+    options.push({
+      name: process.env.LITELLM_MODEL,
+      description: "From LITELLM_MODEL",
+      value: process.env.LITELLM_MODEL,
+    });
+  }
+  if (process.env.OPENAI_MODEL) {
+    options.push({
+      name: process.env.OPENAI_MODEL,
+      description: "From OPENAI_MODEL",
+      value: process.env.OPENAI_MODEL,
+    });
+  }
+  options.push({ name: "Custom…", description: "Type a custom model name", value: CUSTOM_SELECT_VALUE });
+  return dedupeSelectOptions(options);
+}
+
+function buildEndpointSelectOptions(settings: AppSettings): PromptSelectOption[] {
+  const options: PromptSelectOption[] = [];
+  if (settings.endpoint) {
+    options.push({ name: settings.endpoint, description: "Current value", value: settings.endpoint });
+  }
+  if (process.env.LITELLM_BASE_URL) {
+    options.push({
+      name: process.env.LITELLM_BASE_URL,
+      description: "From LITELLM_BASE_URL",
+      value: process.env.LITELLM_BASE_URL,
+    });
+  }
+  if (process.env.OPENAI_BASE_URL) {
+    options.push({
+      name: process.env.OPENAI_BASE_URL,
+      description: "From OPENAI_BASE_URL",
+      value: process.env.OPENAI_BASE_URL,
+    });
+  }
+  options.push({ name: "https://api.openai.com/v1", description: "OpenAI default", value: "https://api.openai.com/v1" });
+  options.push({ name: "Custom…", description: "Type a custom endpoint", value: CUSTOM_SELECT_VALUE });
+  return dedupeSelectOptions(options);
+}
+
+function buildApiKeySelectOptions(): PromptSelectOption[] {
+  const options: PromptSelectOption[] = [];
+  if (process.env.LITELLM_API_KEY) {
+    options.push({
+      name: "Use LITELLM_API_KEY",
+      description: "Apply the LiteLLM API key from env",
+      value: process.env.LITELLM_API_KEY,
+    });
+  }
+  if (process.env.OPENAI_API_KEY) {
+    options.push({
+      name: "Use OPENAI_API_KEY",
+      description: "Apply the OpenAI API key from env",
+      value: process.env.OPENAI_API_KEY,
+    });
+  }
+  options.push({ name: "Custom…", description: "Type a custom API key", value: CUSTOM_SELECT_VALUE });
+  return dedupeSelectOptions(options);
+}
+
+function buildAfBridgeSelectOptions(settings: AppSettings): PromptSelectOption[] {
+  const options: PromptSelectOption[] = [];
+  if (settings.afBridgeBaseUrl) {
+    options.push({
+      name: settings.afBridgeBaseUrl,
+      description: "Current value",
+      value: settings.afBridgeBaseUrl,
+    });
+  }
+  if (process.env.AF_BRIDGE_BASE_URL) {
+    options.push({
+      name: process.env.AF_BRIDGE_BASE_URL,
+      description: "From AF_BRIDGE_BASE_URL",
+      value: process.env.AF_BRIDGE_BASE_URL,
+    });
+  }
+  options.push({
+    name: "http://127.0.0.1:8081",
+    description: "Local bridge default",
+    value: "http://127.0.0.1:8081",
+  });
+  options.push({ name: "Custom…", description: "Type a custom bridge URL", value: CUSTOM_SELECT_VALUE });
+  return dedupeSelectOptions(options);
+}
+
+function buildAfModelSelectOptions(settings: AppSettings): PromptSelectOption[] {
+  const options: PromptSelectOption[] = [];
+  if (settings.afModel) {
+    options.push({ name: settings.afModel, description: "Current value", value: settings.afModel });
+  }
+  if (process.env.AF_MODEL) {
+    options.push({ name: process.env.AF_MODEL, description: "From AF_MODEL", value: process.env.AF_MODEL });
+  }
+  options.push({
+    name: "multi_tier_support",
+    description: "Default bridge workflow",
+    value: "multi_tier_support",
+  });
+  options.push({ name: "Custom…", description: "Type a custom workflow ID", value: CUSTOM_SELECT_VALUE });
+  return dedupeSelectOptions(options);
+}
 
 export interface CommandContext {
   settings: AppSettings;
@@ -204,6 +334,7 @@ function handleSettingCommand(
     shouldMaskValue?: boolean;
     placeholder?: string;
     applyValue?: (value: string, context: CommandContext) => void;
+    selectOptions?: PromptSelectOption[];
   }
 ): CommandResult {
   const { settings, setSettings, setMessages, setPrompt } = context;
@@ -234,7 +365,8 @@ function handleSettingCommand(
         : "Not set"
       : displayValue;
 
-  if (setPrompt) {
+  const openInputPrompt = () => {
+    if (!setPrompt) return;
     const defaultValue =
       options?.shouldMaskValue || typeof storedValue !== "string"
         ? ""
@@ -262,8 +394,42 @@ function handleSettingCommand(
       },
       onCancel: () => setPrompt(null),
     });
+  };
+
+  if (setPrompt && options?.selectOptions && options.selectOptions.length > 0) {
+    const selectedIndex = selectIndexForValue(options.selectOptions, storedValue);
+    setPrompt({
+      type: "select",
+      message: promptMessage,
+      options: options.selectOptions,
+      selectedIndex,
+      onSelect: (option) => {
+        if (option.value === CUSTOM_SELECT_VALUE) {
+          openInputPrompt();
+          return;
+        }
+        const resolvedValue = option.value ?? option.name;
+        if (resolvedValue) {
+          applyValue(resolvedValue, context);
+          if (setMessages) {
+            const systemMsg: Message = {
+              id: generateUniqueId(),
+              role: "system",
+              content: confirmationFormatter(resolvedValue),
+              timestamp: new Date(),
+            };
+            setMessages((prev) => [...prev, systemMsg]);
+          }
+        }
+        setPrompt(null);
+      },
+      onCancel: () => setPrompt(null),
+    });
     return { shouldReturn: true };
   }
+
+  openInputPrompt();
+  return { shouldReturn: true };
 
   const msg = `${promptMessage}\nCurrent: ${masked}\nUsage: /${settingKey} <value>`;
   return { systemMessage: { id: generateUniqueId(), role: "system", content: msg, timestamp: new Date() } };
@@ -275,11 +441,11 @@ export function handleModelCommand(
 ): CommandResult {
   return handleSettingCommand(
     "model",
-    "Enter model name:",
+    "Select model:",
     (v) => `Model set to: ${v}`,
     args,
     context,
-    { placeholder: "openai/gpt-4o-mini" }
+    { placeholder: "openai/gpt-4o-mini", selectOptions: buildModelSelectOptions(context.settings) }
   );
 }
 
@@ -289,13 +455,29 @@ export function handleProviderCommand(
 ): CommandResult {
   return handleSettingCommand(
     "provider",
-    "Enter provider (openai, azure, litellm, custom):",
-    (v) => `Provider set to: ${v} (defaults updated when available)`,
+    "Select provider:",
+    (v) =>
+      v === AUTO_SELECT_VALUE
+        ? "Provider set to: Auto (detect)"
+        : `Provider set to: ${v} (defaults updated when available)`,
     args,
     context,
     {
       placeholder: "litellm",
-      applyValue: (value, ctx) => ctx.setSettings((prev) => applyProviderDefaults(prev, value)),
+      selectOptions: [
+        { name: "Auto (detect)", description: "Let qlaw-cli infer the provider", value: AUTO_SELECT_VALUE },
+        { name: "openai", description: "OpenAI Responses API", value: "openai" },
+        { name: "azure", description: "Azure OpenAI", value: "azure" },
+        { name: "litellm", description: "LiteLLM proxy (OpenAI-compatible)", value: "litellm" },
+        { name: "custom", description: "Custom OpenAI-compatible provider", value: "custom" },
+      ],
+      applyValue: (value, ctx) => {
+        if (value === AUTO_SELECT_VALUE) {
+          ctx.setSettings((prev) => ({ ...prev, provider: undefined }));
+          return;
+        }
+        ctx.setSettings((prev) => applyProviderDefaults(prev, value));
+      },
     }
   );
 }
@@ -306,11 +488,11 @@ export function handleEndpointCommand(
 ): CommandResult {
   return handleSettingCommand(
     "endpoint",
-    "Enter API endpoint base URL:",
+    "Select API endpoint base URL:",
     (v) => `Endpoint set to: ${v}`,
     args,
     context,
-    { placeholder: "http://localhost:4000/v1" }
+    { placeholder: "http://localhost:4000/v1", selectOptions: buildEndpointSelectOptions(context.settings) }
   );
 }
 
@@ -320,11 +502,11 @@ export function handleApiKeyCommand(
 ): CommandResult {
   return handleSettingCommand(
     "apiKey",
-    "Enter API key:",
+    "Select API key:",
     () => "API key updated.",
     args,
     context,
-    { shouldMaskValue: true, placeholder: "sk-..." }
+    { shouldMaskValue: true, placeholder: "sk-...", selectOptions: buildApiKeySelectOptions() }
   );
 }
 
@@ -529,10 +711,11 @@ export function handleAfBridgeCommand(
 ): CommandResult {
   return handleSettingCommand(
     "afBridgeBaseUrl",
-    "Enter Agent Framework bridge base URL:",
+    "Select Agent Framework bridge base URL:",
     (v) => `Agent Framework bridge URL set to: ${v}`,
     args,
-    context
+    context,
+    { selectOptions: buildAfBridgeSelectOptions(context.settings) }
   );
 }
 
@@ -542,10 +725,11 @@ export function handleAfModelCommand(
 ): CommandResult {
   return handleSettingCommand(
     "afModel",
-    "Enter Agent Framework model identifier:",
+    "Select Agent Framework model identifier:",
     (v) => `Agent Framework model set to: ${v}`,
     args,
-    context
+    context,
+    { selectOptions: buildAfModelSelectOptions(context.settings) }
   );
 }
 

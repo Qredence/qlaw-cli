@@ -95,11 +95,25 @@ export type UISuggestion = {
   requiresValue?: boolean;
 };
 
+export type PromptSelectOption = {
+  name: string;
+  description?: string;
+  value?: string;
+};
+
 export type Prompt =
   | {
       type: "confirm";
       message: string;
       onConfirm: () => void;
+      onCancel?: () => void;
+    }
+  | {
+      type: "select";
+      message: string;
+      options: PromptSelectOption[];
+      selectedIndex?: number;
+      onSelect: (option: PromptSelectOption, index: number) => void;
       onCancel?: () => void;
     }
   | {

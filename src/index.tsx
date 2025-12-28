@@ -87,6 +87,7 @@ function App() {
   // Prompt state
   const [prompt, setPrompt] = useState<Prompt | null>(null);
   const [promptInputValue, setPromptInputValue] = useState("");
+  const [promptSelectIndex, setPromptSelectIndex] = useState(0);
 
   // Tool execution queue
   const [toolQueue, setToolQueue] = useState<ToolCall[] | null>(null);
@@ -310,8 +311,12 @@ function App() {
   useEffect(() => {
     if (prompt && prompt.type === "input") {
       setPromptInputValue(prompt.defaultValue || "");
+      setPromptSelectIndex(0);
+    } else if (prompt && prompt.type === "select") {
+      setPromptSelectIndex(prompt.selectedIndex ?? 0);
     } else if (!prompt) {
       setPromptInputValue("");
+      setPromptSelectIndex(0);
     }
   }, [prompt]);
 
@@ -593,9 +598,12 @@ function App() {
           promptInputValue={promptInputValue}
           onInputChange={setPromptInputValue}
           onConfirm={() => {
+            if (prompt.type !== "input") return;
             prompt.onConfirm(promptInputValue);
             setPromptInputValue("");
           }}
+          promptSelectIndex={promptSelectIndex}
+          onSelectIndexChange={setPromptSelectIndex}
           colors={COLORS}
         />
       )}

@@ -12,6 +12,8 @@ export interface PromptOverlayProps {
   promptInputValue: string;
   onInputChange: (value: string) => void;
   onConfirm: () => void;
+  promptSelectIndex: number;
+  onSelectIndexChange: (index: number) => void;
   colors: ThemeTokens;
 }
 
@@ -23,6 +25,8 @@ export function PromptOverlay({
   promptInputValue,
   onInputChange,
   onConfirm,
+  promptSelectIndex,
+  onSelectIndexChange,
   colors,
 }: PromptOverlayProps) {
   return (
@@ -70,6 +74,48 @@ export function PromptOverlay({
               }}
             />
           </box>
+        ) : prompt.type === "select" ? (
+          <>
+            <box
+              style={{
+                border: true,
+                borderColor: colors.border,
+                backgroundColor: colors.bg.primary,
+                paddingLeft: 1,
+                paddingRight: 1,
+                paddingTop: 1,
+                paddingBottom: 1,
+                marginTop: 1,
+              }}
+            >
+              <select
+                options={prompt.options.map((option) => ({
+                  ...option,
+                  description: option.description || "",
+                }))}
+                selectedIndex={promptSelectIndex}
+                focused={true}
+                onChange={(index) => {
+                  onSelectIndexChange(index);
+                }}
+                onSelect={(index, option) => {
+                  onSelectIndexChange(index);
+                  if (option) {
+                    prompt.onSelect(option, index);
+                  }
+                }}
+                style={{ height: 8 }}
+              />
+            </box>
+            <text
+              content="↑↓ choose · Enter select · Esc cancel"
+              style={{
+                fg: colors.text.dim,
+                attributes: TextAttributes.DIM,
+                marginTop: 1,
+              }}
+            />
+          </>
         ) : (
           <text
             content="Press Enter to confirm · Esc to cancel"
@@ -84,4 +130,3 @@ export function PromptOverlay({
     </box>
   );
 }
-

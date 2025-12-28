@@ -110,9 +110,9 @@ export function useKeyboardShortcuts(
         context.setPromptInputValue("");
         return;
       }
-      // For input type prompts, let the input component handle Enter
-      if (context.prompt.type === "input") {
-        return; // input component will handle enter via onSubmit
+      // For input/select prompts, let the component handle Enter
+      if (context.prompt.type === "input" || context.prompt.type === "select") {
+        return; // component will handle enter via onSubmit/onSelect
       }
     }
 
