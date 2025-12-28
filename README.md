@@ -17,6 +17,7 @@
 ### Core Capabilities
 
 - 🤖 **OpenAI/Azure Integration** - Streaming responses with OpenAI and Azure OpenAI support
+- 🔌 **LiteLLM-Compatible Providers** - Use `openai/...` style model IDs via LiteLLM proxies
 - 💬 **Session Management** - Multiple conversations with persistent history
 - ⚡ **Command System** - 10+ built-in commands + custom command support
 - 🏷️ **Smart Mentions** - Context, file, code, and docs references
@@ -83,6 +84,12 @@ cp .env.example .env
 # Add your OpenAI API key to .env
 # OPENAI_API_KEY=your-key-here
 
+# LiteLLM (default provider) example
+# LITELLM_BASE_URL=http://localhost:4000/v1
+# LITELLM_API_KEY=your-key-here
+# LITELLM_MODEL=openai/gpt-4o-mini
+# LITELLM_MODELS=openai/gpt-4o-mini,openai/gpt-4o
+
 # Run locally
 bun run start
 
@@ -106,9 +113,12 @@ Type `/` to see available commands:
 
 - `/clear` - Clear chat history (with confirmation)
 - `/help` - Show help information
+- `/provider` - Set provider (openai/azure/litellm/custom)
 - `/model` - Set the model name
 - `/endpoint` - Set the API endpoint base URL
 - `/api-key` - Set the API key (masked in status)
+- `/tools` - Toggle tool execution (read/list/write/run)
+- `/tools perm` - Set tool permissions (allow/ask/deny)
 - `/status` - Show current configuration
 - `/settings` - Print current settings summary
 - `/settings panel` - Open the interactive settings menu
@@ -144,12 +154,18 @@ Type `@` for contextual references:
 - `@file <path>` - Reference a file in your message
 - `@code <snippet>` - Include a code snippet in your message
 - `@docs <topic>` - Reference documentation in your message
+- `@code function example() { return true; }` will format as a code snippet
 
 Mentions are automatically formatted to provide structured context to the AI. For example:
 
 - `@docs API authentication` will format as a documentation reference
-- `@file src/index.ts` will format as a file reference
-- `@code function example() { return true; }` will format as a code snippet
+- `@file src/index.ts` will inline the file contents (truncated if needed)
+
+### Coding Agent Tools
+
+When `/tools` is enabled, the assistant can request tool execution using fenced `tool` blocks.
+Permissions follow `allow | ask | deny` and can be configured via `/tools perm`.
+`run_command` executes shell commands and should only be enabled when you trust the model.
 
 ### Keyboard Shortcuts
 

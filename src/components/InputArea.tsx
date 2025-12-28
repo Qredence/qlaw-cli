@@ -6,6 +6,7 @@ interface InputAreaProps {
   input: string;
   inputMode: InputMode;
   isProcessing: boolean;
+  isFocused: boolean;
   placeholder: string;
   hint: string;
   colors: ThemeTokens;
@@ -17,6 +18,7 @@ export function InputArea({
   input,
   inputMode,
   isProcessing,
+  isFocused,
   placeholder,
   hint,
   colors,
@@ -58,7 +60,7 @@ export function InputArea({
           value={input}
           onInput={onInput}
           onSubmit={onSubmit}
-          focused={!isProcessing}
+          focused={isFocused && !isProcessing}
           style={{
             flexGrow: 1,
             height: 2,

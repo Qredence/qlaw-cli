@@ -29,6 +29,9 @@ export function StatusLine({
   suggestionFooter,
   colors,
 }: StatusLineProps) {
+  const providerLabel = settings.provider || "auto";
+  const modelLabel = settings.model || "not set";
+  const toolsLabel = settings.tools?.enabled ? "tools on" : "tools off";
   const leftContent = (() => {
     if (isProcessing)
       return `Warping... (esc to interrupt · ${elapsedSec}s)`;
@@ -36,10 +39,10 @@ export function StatusLine({
     const bridgePart =
       mode === "workflow"
         ? settings.afBridgeBaseUrl
-          ? "Workflow • AF bridge ready"
+          ? `Workflow • AF ${settings.afModel || settings.model || "model"}`
           : "Workflow • AF bridge not set"
-        : "Standard • Configure OpenAI settings to enable streaming";
-    return `Mode: ${bridgePart} • Theme: ${settings.theme} • /help for tips`;
+        : `Standard • ${providerLabel} • ${modelLabel}`;
+    return `Mode: ${bridgePart} • Theme: ${settings.theme} • ${toolsLabel} • /help for tips`;
   })();
 
   const rightContent = isProcessing

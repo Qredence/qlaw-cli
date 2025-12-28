@@ -25,6 +25,7 @@ export interface KeyboardShortcutsContext {
   handleSessionActivate: () => void;
 
   // Settings menu navigation
+  settingsSections: Array<{ items: Array<{ onActivate?: () => void }> }>;
   flatSettingsItems: Array<{ onActivate?: () => void }>;
   settingsFocusIndex: number;
   setSettingsFocusIndex: React.Dispatch<React.SetStateAction<number>>;
@@ -109,9 +110,9 @@ export function useKeyboardShortcuts(
         context.setPromptInputValue("");
         return;
       }
-      // For input type prompts, let the input component handle Enter
-      if (context.prompt.type === "input") {
-        return; // input component will handle enter via onSubmit
+      // For input/select prompts, let the component handle Enter
+      if (context.prompt.type === "input" || context.prompt.type === "select") {
+        return; // component will handle enter via onSubmit/onSelect
       }
     }
 
@@ -120,6 +121,30 @@ export function useKeyboardShortcuts(
       if (key.name === "escape") {
         context.setShowSettingsMenu(false);
         return;
+      }
+      if (context.settingsSections.length > 0) {
+        let cursor = 0;
+        const ranges = context.settingsSections.map((section) => {
+          const start = cursor;
+          const end = cursor + section.items.length - 1;
+          cursor += section.items.length;
+          return { start, end };
+        });
+        const activeSectionIndex = ranges.findIndex(
+          (r) => context.settingsFocusIndex >= r.start && context.settingsFocusIndex <= r.end
+        );
+        if (key.name === "left" || key.name === "right") {
+          if (ranges.length > 0) {
+            const delta = key.name === "left" ? -1 : 1;
+            const current = activeSectionIndex >= 0 ? activeSectionIndex : 0;
+            const next = (current + delta + ranges.length) % ranges.length;
+            const target = ranges[next];
+            if (target) {
+              context.setSettingsFocusIndex(target.start);
+              return;
+            }
+          }
+        }
       }
       if (context.flatSettingsItems.length > 0) {
         if (key.name === "down" || (key.name === "tab" && !key.shift)) {
@@ -219,4 +244,3 @@ export function useKeyboardShortcuts(
     }
   });
 }
-

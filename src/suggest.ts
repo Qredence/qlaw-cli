@@ -2,6 +2,7 @@ export interface FuzzyItem {
   key: string;
   description?: string;
   keywords?: string[];
+  requiresValue?: boolean;
 }
 
 export interface FuzzyResult extends FuzzyItem {

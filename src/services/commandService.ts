@@ -14,6 +14,7 @@ import {
   handleClearCommand,
   handleHelpCommand,
   handleModelCommand,
+  handleProviderCommand,
   handleEndpointCommand,
   handleApiKeyCommand,
   handleSettingsCommand,
@@ -36,6 +37,7 @@ import {
   handleAfBridgeCommand,
   handleAfModelCommand,
   handleKeybindingsCommand,
+  handleToolsCommand,
   handleLoginCommand,
   handleFoundryEndpointCommand,
   handleAgentCommand,
@@ -89,6 +91,8 @@ export async function executeCommand(
       return handleHelpCommand();
     case "model":
       return handleModelCommand(args, commandContext);
+    case "provider":
+      return handleProviderCommand(args, commandContext);
     case "endpoint":
       return handleEndpointCommand(args, commandContext);
     case "api-key":
@@ -105,6 +109,8 @@ export async function executeCommand(
       return handleAgentCommand(args, commandContext);
     case "keybindings":
       return handleKeybindingsCommand(args, commandContext);
+    case "tools":
+      return handleToolsCommand(args, commandContext);
     case "settings":
       return handleSettingsCommand(args, commandContext);
     case "sessions":
@@ -143,4 +149,3 @@ export async function executeCommand(
       return handleUnknownCommand(cmd, commandContext);
   }
 }
-

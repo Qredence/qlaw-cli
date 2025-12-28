@@ -27,8 +27,16 @@ if [[ -d "$CAND_PY_PATH_1/agent_framework" ]]; then
 fi
 
 if [[ -z "${OPENAI_BASE_URL:-}" || -z "${OPENAI_API_KEY:-}" || -z "${OPENAI_MODEL:-}" ]]; then
+  if [[ -n "${LITELLM_BASE_URL:-}" || -n "${LITELLM_API_KEY:-}" || -n "${LITELLM_MODEL:-}" ]]; then
+    export OPENAI_BASE_URL="${OPENAI_BASE_URL:-${LITELLM_BASE_URL:-}}"
+    export OPENAI_API_KEY="${OPENAI_API_KEY:-${LITELLM_API_KEY:-}}"
+    export OPENAI_MODEL="${OPENAI_MODEL:-${LITELLM_MODEL:-}}"
+  fi
+fi
+
+if [[ -z "${OPENAI_BASE_URL:-}" || -z "${OPENAI_API_KEY:-}" || -z "${OPENAI_MODEL:-}" ]]; then
   echo "[warn] OPENAI_BASE_URL / OPENAI_API_KEY / OPENAI_MODEL not set."
-  echo "       The bridge uses OpenAIChatClient by default. Set these to a real backend."
+  echo "       The bridge uses OpenAIChatClient by default. Set these or LITELLM_* vars."
 fi
 
 # If you have a local agent-framework checkout, set PYTHONPATH to make it importable.

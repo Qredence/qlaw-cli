@@ -55,6 +55,7 @@ export function useInputMode(
           key: c.name,
           description: c.description,
           keywords: c.keywords,
+          requiresValue: c.requiresValue,
         })),
         ...customCommands.map((c) => ({
           key: c.name,
@@ -71,6 +72,8 @@ export function useInputMode(
             : getBuiltInDescription(m.key) || ""),
         kind: customKeys.has(m.key) ? "custom-command" : "command",
         score: m.score,
+        keywords: m.keywords,
+        requiresValue: m.requiresValue,
       }));
       setSuggestions(mapped);
       setSelectedSuggestionIndex(0);
@@ -88,6 +91,7 @@ export function useInputMode(
         description: m.description,
         kind: "mention",
         score: m.score,
+        keywords: m.keywords,
       }));
       setSuggestions(mapped);
       setSelectedSuggestionIndex(0);
