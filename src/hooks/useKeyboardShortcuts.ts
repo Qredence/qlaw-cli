@@ -14,9 +14,19 @@ export interface KeyboardShortcutsContext {
   setShowSessionList: (show: boolean) => void;
   showSettingsMenu: boolean;
   setShowSettingsMenu: (show: boolean) => void;
+  showCommandPalette: boolean;
+  setShowCommandPalette: (show: boolean) => void;
   prompt: Prompt | null;
   setPrompt: (prompt: Prompt | null) => void;
   setPromptInputValue: (value: string) => void;
+
+  // Command palette state
+  commandPaletteCommands: Array<{ name: string; description: string; keywords?: string[]; requiresValue?: boolean }>;
+  commandPaletteFocusIndex: number;
+  setCommandPaletteFocusIndex: React.Dispatch<React.SetStateAction<number>>;
+  commandPaletteSearch: string;
+  setCommandPaletteSearch: (search: string) => void;
+  handleCommandPaletteSelect: (command: { name: string; requiresValue?: boolean }) => void;
 
   // Session list navigation
   recentSessions: Array<{ id: string }>;
@@ -240,6 +250,73 @@ export function useKeyboardShortcuts(
     // Exit with Ctrl+C
     if (key.ctrl && key.name === "c") {
       renderer?.stop();
+      return;
+    }
+
+    // Command Palette with Ctrl+P
+    if (key.ctrl && key.name === "p") {
+      context.setShowCommandPalette(true);
+      context.setCommandPaletteSearch("");
+      context.setCommandPaletteFocusIndex(0);
+      return;
+    }
+
+    // Command Palette navigation
+    if (context.showCommandPalette) {
+      if (key.name === "escape") {
+        context.setShowCommandPalette(false);
+        context.setCommandPaletteSearch("");
+        return;
+      }
+
+      // Get filtered count for navigation
+      const filteredCount = context.commandPaletteCommands.filter((cmd) => {
+        if (!context.commandPaletteSearch) return true;
+        const query = context.commandPaletteSearch.toLowerCase();
+        return (
+          cmd.name.toLowerCase().includes(query) ||
+          cmd.description.toLowerCase().includes(query) ||
+          cmd.keywords?.some((k) => k.toLowerCase().includes(query))
+        );
+      }).length;
+
+      if (filteredCount > 0) {
+        if (key.name === "down" || (key.name === "tab" && !key.shift)) {
+          context.setCommandPaletteFocusIndex(
+            (prev) => (prev + 1) % filteredCount
+          );
+          return;
+        }
+        if (key.name === "up" || (key.name === "tab" && key.shift)) {
+          context.setCommandPaletteFocusIndex(
+            (prev) => (prev - 1 + filteredCount) % filteredCount
+          );
+          return;
+        }
+      }
+
+      if (key.name === "enter" || key.name === "return") {
+        const filtered = context.commandPaletteCommands.filter((cmd) => {
+          if (!context.commandPaletteSearch) return true;
+          const query = context.commandPaletteSearch.toLowerCase();
+          return (
+            cmd.name.toLowerCase().includes(query) ||
+            cmd.description.toLowerCase().includes(query) ||
+            cmd.keywords?.some((k) => k.toLowerCase().includes(query))
+          );
+        });
+        if (filtered.length > 0 && context.commandPaletteFocusIndex < filtered.length) {
+          const selected = filtered[context.commandPaletteFocusIndex];
+          if (selected) {
+            context.handleCommandPaletteSelect(selected);
+            context.setShowCommandPalette(false);
+            context.setCommandPaletteSearch("");
+            return;
+          }
+        }
+      }
+
+      // Let input events through for search
       return;
     }
   });

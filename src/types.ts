@@ -89,11 +89,13 @@ export type InputMode = "chat" | "command" | "mention" | "settings-menu";
 export type UISuggestion = {
   label: string;
   description?: string;
-  kind: "command" | "custom-command" | "mention";
+  kind: "command" | "custom-command" | "mention" | "file" | "folder";
   score?: number;
   // Optional keywords to improve fuzzy matching relevance.
   keywords?: string[];
   requiresValue?: boolean;
+  // Path for file/folder suggestions
+  path?: string;
 };
 
 export type PromptSelectOption = {

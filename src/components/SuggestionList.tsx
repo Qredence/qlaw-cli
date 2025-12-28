@@ -13,6 +13,34 @@ interface SuggestionListProps {
   maxVisible?: number;
 }
 
+/** Get an icon for a file/folder suggestion */
+function getSuggestionIcon(kind: UISuggestion["kind"], isSelected: boolean, colors: ThemeTokens): string {
+  switch (kind) {
+    case "folder":
+      return isSelected ? "📂" : "📁";
+    case "file":
+      return "📄";
+    default:
+      return "";
+  }
+}
+
+/** Get the kind label for display */
+function getKindLabel(kind: UISuggestion["kind"]): string {
+  switch (kind) {
+    case "custom-command":
+      return "custom";
+    case "command":
+      return "built-in";
+    case "file":
+      return "file";
+    case "folder":
+      return "folder";
+    default:
+      return "mention";
+  }
+}
+
 export function SuggestionList({
   suggestions,
   selectedIndex,
@@ -153,13 +181,12 @@ export function SuggestionList({
           const globalIndex = window.offset + index;
           const isSelected = globalIndex === selectedIndex;
           const prefix = inputMode === "command" ? "/" : "@";
-          const kindLabel =
-            s.kind === "custom-command"
-              ? "custom"
-              : s.kind === "command"
-              ? "built-in"
-              : "mention";
+          const kindLabel = getKindLabel(s.kind);
+          const icon = getSuggestionIcon(s.kind, isSelected, colors);
           const [before, match, after] = splitMatch(s.label, query);
+
+          // For file/folder suggestions, don't show the @ prefix in the label
+          const showPrefix = s.kind !== "file" && s.kind !== "folder";
 
           return (
             <box
@@ -174,14 +201,25 @@ export function SuggestionList({
               }}
             >
               <box style={{ flexDirection: "row", flexShrink: 1 }}>
-                <box style={{ flexDirection: "row" }}>
+                {icon && (
                   <text
-                    content={prefix}
+                    content={icon + " "}
                     style={{
                       fg: isSelected ? colors.text.accent : colors.text.primary,
-                      attributes: isSelected ? TextAttributes.BOLD : 0,
+                      marginRight: 1,
                     }}
                   />
+                )}
+                <box style={{ flexDirection: "row" }}>
+                  {showPrefix && (
+                    <text
+                      content={prefix}
+                      style={{
+                        fg: isSelected ? colors.text.accent : colors.text.primary,
+                        attributes: isSelected ? TextAttributes.BOLD : 0,
+                      }}
+                    />
+                  )}
                   <text
                     content={before}
                     style={{
@@ -209,7 +247,7 @@ export function SuggestionList({
                 </box>
                 {s.description && (
                   <text
-                    content={s.description}
+                    content={` · ${s.description}`}
                     style={{
                       fg: colors.text.dim,
                       attributes: TextAttributes.DIM,
@@ -241,13 +279,31 @@ export function SuggestionList({
       <box style={{ marginTop: 1, flexDirection: "column" }}>
         {selected && (
           <>
+            {/* Show the selected item - for file/folder use the label directly */}
             <text
-              content={`${inputMode === "command" ? "/" : "@"}${selected.label}`}
+              content={
+                selected.kind === "file" || selected.kind === "folder"
+                  ? selected.label
+                  : `${inputMode === "command" ? "/" : "@"}${selected.label}`
+              }
               style={{ fg: colors.text.secondary, attributes: TextAttributes.BOLD }}
             />
-            {selected.description && (
+            {selected.description && selected.kind !== "file" && selected.kind !== "folder" && (
               <text
                 content={selected.description}
+                style={{ fg: colors.text.dim, attributes: TextAttributes.DIM }}
+              />
+            )}
+            {/* Show file/folder metadata */}
+            {selected.kind === "file" && selected.path && (
+              <text
+                content={selected.path}
+                style={{ fg: colors.text.dim, attributes: TextAttributes.DIM }}
+              />
+            )}
+            {selected.kind === "folder" && selected.path && (
+              <text
+                content={`${selected.path}/`}
                 style={{ fg: colors.text.dim, attributes: TextAttributes.DIM }}
               />
             )}

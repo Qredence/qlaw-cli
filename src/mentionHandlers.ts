@@ -3,12 +3,13 @@
  * Formats mentions to provide structured context to the AI
  */
 
-import { readFile } from "fs/promises";
+import { readFile, readdir, lstat } from "fs/promises";
 import { resolve, extname, relative, isAbsolute } from "path";
 
 export type MentionType =
   | "context"
   | "file"
+  | "folder"
   | "code"
   | "docs"
   | "coder"
@@ -33,7 +34,7 @@ export interface MentionMatch {
  */
 export function detectMentions(text: string): MentionMatch[] {
   const mentions: MentionMatch[] = [];
-  const mentionRegex = /@(context|file|code|docs|coder|planner|reviewer|judge)(?:\s+([^\n@]+))?/gi;
+  const mentionRegex = /@(context|file|folder|code|docs|coder|planner|reviewer|judge)(?:\s+([^\n@]+))?/gi;
   let match;
 
   while ((match = mentionRegex.exec(text)) !== null) {
@@ -116,6 +117,12 @@ function formatMention(type: MentionType, content: string): string {
       }
       return `[Documentation Reference]\n\nPlease reference relevant documentation when providing your response.`;
 
+    case "folder":
+      if (content) {
+        return `[Directory Reference: ${content}]\n\nPlease consider the contents of the directory "${content}" when providing your response.`;
+      }
+      return `[Directory Reference]\n\nPlease reference relevant directories when providing your response.`;
+
     case "file":
       if (content) {
         return `[File Reference: ${content}]\n\nPlease consider the contents of the file "${content}" when providing your response.`;
@@ -150,27 +157,60 @@ async function formatMentionAsync(
   content: string,
   options: MentionFormatOptions
 ): Promise<string> {
-  if (type !== "file" || !content) {
-    return formatMention(type, content);
-  }
+  // Handle file mentions with content reading
+  if (type === "file" && content) {
+    const path = content.trim();
+    if (!path) return formatMention(type, content);
 
-  const path = content.trim();
-  if (!path) return formatMention(type, content);
-
-  try {
-    const fullPath = resolve(options.cwd, path);
-    if (isExternalPath(fullPath, options.cwd)) {
-      return `[File Reference: ${path}]\n\nUnable to read file (outside working directory).`;
+    try {
+      const fullPath = resolve(options.cwd, path);
+      if (isExternalPath(fullPath, options.cwd)) {
+        return `[File Reference: ${path}]\n\nUnable to read file (outside working directory).`;
+      }
+      const file = await readFile(fullPath);
+      const limited = file.length > options.maxFileBytes ? file.subarray(0, options.maxFileBytes) : file;
+      const text = limited.toString("utf-8");
+      const suffix = file.length > options.maxFileBytes ? `\n…truncated (${file.length - options.maxFileBytes} bytes)` : "";
+      const lang = guessLanguage(path);
+      return `[File: ${path}]\n\`\`\`${lang}\n${text}${suffix}\n\`\`\``;
+    } catch (e: any) {
+      return `[File Reference: ${path}]\n\nUnable to read file (${e?.message || e}). Please verify the path.`;
     }
-    const file = await readFile(fullPath);
-    const limited = file.length > options.maxFileBytes ? file.subarray(0, options.maxFileBytes) : file;
-    const text = limited.toString("utf-8");
-    const suffix = file.length > options.maxFileBytes ? `\n…truncated (${file.length - options.maxFileBytes} bytes)` : "";
-    const lang = guessLanguage(path);
-    return `[File: ${path}]\n\`\`\`${lang}\n${text}${suffix}\n\`\`\``;
-  } catch (e: any) {
-    return `[File Reference: ${path}]\n\nUnable to read file (${e?.message || e}). Please verify the path.`;
   }
+
+  // Handle folder mentions with directory listing
+  if (type === "folder" && content) {
+    const path = content.trim();
+    if (!path) return formatMention(type, content);
+
+    try {
+      const fullPath = resolve(options.cwd, path);
+      if (isExternalPath(fullPath, options.cwd)) {
+        return `[Directory Reference: ${path}]\n\nUnable to read directory (outside working directory).`;
+      }
+
+      const entries = await readdir(fullPath, { withFileTypes: true });
+      const maxEntries = 50;
+      const limited = entries.slice(0, maxEntries);
+      const lines = await Promise.all(
+        limited.map(async (entry) => {
+          const isDir = entry.isDirectory() || (entry.isSymbolicLink() && (await lstat(resolve(fullPath, entry.name))).isDirectory());
+          const icon = isDir ? "[DIR]" : "[FILE]";
+          return `${icon} ${entry.name}`;
+        })
+      );
+
+      const more = entries.length > maxEntries
+        ? `\n... and ${entries.length - maxEntries} more items`
+        : "";
+
+      return `[Directory: ${path}]\n${lines.join("\n")}${more}`;
+    } catch (e: any) {
+      return `[Directory Reference: ${path}]\n\nUnable to read directory (${e?.message || e}). Please verify the path.`;
+    }
+  }
+
+  return formatMention(type, content);
 }
 
 function isExternalPath(targetPath: string, cwd: string): boolean {
@@ -197,5 +237,5 @@ function guessLanguage(path: string): string {
  * Checks if a message contains any mentions
  */
 export function hasMentions(text: string): boolean {
-  return /@(context|file|code|docs|coder|planner|reviewer|judge)/i.test(text);
+  return /@(context|file|folder|code|docs|coder|planner|reviewer|judge)/i.test(text);
 }

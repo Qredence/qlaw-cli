@@ -24,6 +24,7 @@ import {
 import { resolveToolPermission } from "./tools/permissions.ts";
 import { SessionList } from "./components/SessionList.tsx";
 import { SettingsMenu } from "./components/SettingsMenu.tsx";
+import { CommandPalette } from "./components/CommandPalette.tsx";
 import { MessageList } from "./components/MessageList.tsx";
 import { InputArea } from "./components/InputArea.tsx";
 import { WelcomeScreen } from "./components/WelcomeScreen.tsx";
@@ -31,6 +32,7 @@ import { SuggestionList } from "./components/SuggestionList.tsx";
 import { getSuggestionFooter, getInputPlaceholder, getInputHint } from "./uiHelpers.ts";
 import { PromptOverlay } from "./components/PromptOverlay.tsx";
 import { StatusLine } from "./components/StatusLine.tsx";
+import { BUILT_IN_COMMANDS } from "./commands.ts";
 
 const MAX_VISIBLE_SUGGESTIONS = 8;
 
@@ -320,6 +322,11 @@ function App() {
     handleSessionActivate,
   } = sessionsHook;
 
+  // Command palette state
+  const [showCommandPalette, setShowCommandPalette] = useState(false);
+  const [commandPaletteFocusIndex, setCommandPaletteFocusIndex] = useState(0);
+  const [commandPaletteSearch, setCommandPaletteSearch] = useState("");
+
   // Theme
   const COLORS = useMemo(() => getTheme(settings.theme), [settings.theme]);
 
@@ -351,35 +358,6 @@ function App() {
       setShowNewMessagesIndicator(true);
     }
   }, [messages, settings.autoScroll, isAtBottom]);
-
-  // Keyboard shortcuts
-  useKeyboardShortcuts({
-    showSessionList,
-    setShowSessionList,
-    showSettingsMenu,
-    setShowSettingsMenu,
-    prompt,
-    setPrompt,
-    setPromptInputValue,
-    recentSessions,
-    sessionFocusIndex,
-    setSessionFocusIndex,
-    handleSessionActivate,
-    settingsSections,
-    flatSettingsItems,
-    settingsFocusIndex,
-    setSettingsFocusIndex,
-    handleSettingsItemActivate,
-    suggestions,
-    selectedSuggestionIndex,
-    setSelectedSuggestionIndex,
-    inputMode: currentInputMode,
-    setInput,
-    mode,
-    setMode,
-    setMessages,
-    settings,
-  });
 
   // Command execution
   const handleExecuteCommand = useCallback(
@@ -424,6 +402,54 @@ function App() {
       renderer,
     ]
   );
+
+  const handleCommandPaletteSelect = useCallback(
+    (command: { name: string; requiresValue?: boolean }) => {
+      if (command.requiresValue) {
+        setInput(`/${command.name} `);
+      } else {
+        void handleExecuteCommand(command.name);
+      }
+    },
+    [setInput, handleExecuteCommand]
+  );
+
+  // Keyboard shortcuts
+  useKeyboardShortcuts({
+    showSessionList,
+    setShowSessionList,
+    showSettingsMenu,
+    setShowSettingsMenu,
+    showCommandPalette,
+    setShowCommandPalette,
+    prompt,
+    setPrompt,
+    setPromptInputValue,
+    commandPaletteCommands: BUILT_IN_COMMANDS,
+    commandPaletteFocusIndex,
+    setCommandPaletteFocusIndex,
+    commandPaletteSearch,
+    setCommandPaletteSearch,
+    handleCommandPaletteSelect,
+    recentSessions,
+    sessionFocusIndex,
+    setSessionFocusIndex,
+    handleSessionActivate,
+    settingsSections,
+    flatSettingsItems,
+    settingsFocusIndex,
+    setSettingsFocusIndex,
+    handleSettingsItemActivate,
+    suggestions,
+    selectedSuggestionIndex,
+    setSelectedSuggestionIndex,
+    inputMode: currentInputMode,
+    setInput,
+    mode,
+    setMode,
+    setMessages,
+    settings,
+  });
 
   // Input submission handler
   const handleSubmit = useCallback(async () => {
@@ -629,6 +655,22 @@ function App() {
         <SettingsMenu
           sections={settingsSections}
           focusIndex={settingsFocusIndex}
+          colors={COLORS}
+        />
+      )}
+
+      {/* Command Palette */}
+      {showCommandPalette && (
+        <CommandPalette
+          commands={BUILT_IN_COMMANDS}
+          focusIndex={commandPaletteFocusIndex}
+          searchQuery={commandPaletteSearch}
+          onSearchChange={setCommandPaletteSearch}
+          onSelect={handleCommandPaletteSelect}
+          onClose={() => {
+            setShowCommandPalette(false);
+            setCommandPaletteSearch("");
+          }}
           colors={COLORS}
         />
       )}
