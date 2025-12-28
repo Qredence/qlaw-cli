@@ -46,8 +46,8 @@ function looksLikeOpenAIModel(model: string | undefined, envOpenaiModel: string 
   const lower = model.toLowerCase();
   return (
     lower.startsWith("gpt-") ||
-    lower.startsWith("o1") ||
-    lower.startsWith("o3") ||
+    /^o1(-|$)/.test(lower) ||
+    /^o3(-|$)/.test(lower) ||
     lower.startsWith("gpt4") ||
     lower.startsWith("gpt3")
   );

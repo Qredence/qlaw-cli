@@ -67,6 +67,22 @@ function truncate(value: string, maxChars: number): string {
   return `${value.slice(0, maxChars)}\n…truncated (${value.length - maxChars} chars)`;
 }
 
+function validateCommand(command: string): void {
+  const dangerous = [
+    /rm\s+-rf\s+\/(?:\s|$)/i,  // rm -rf /
+    /rm\s+-fr\s+\/(?:\s|$)/i,  // rm -fr /
+    /:\(\)\{.*;\};/,            // fork bomb pattern
+    /mkfs\./i,                  // filesystem formatting
+    /dd\s+if=.*of=\/dev\/(sd|hd)/i,  // dd to disk devices
+  ];
+  
+  for (const pattern of dangerous) {
+    if (pattern.test(command)) {
+      throw new Error(`Command contains dangerous pattern: ${pattern.source}`);
+    }
+  }
+}
+
 export async function executeToolCall(call: ToolCall, options: ToolExecutionOptions): Promise<ToolResult> {
   const { cwd, maxFileBytes, maxDirEntries, maxOutputChars } = options;
   const args = call.args || {};
@@ -114,6 +130,7 @@ export async function executeToolCall(call: ToolCall, options: ToolExecutionOpti
       case "run_command": {
         const command = String(args.command || "").trim();
         if (!command) throw new Error("Missing command");
+        validateCommand(command);
         const { stdout, stderr } = await execAsync(command, { cwd, maxBuffer: maxOutputChars * 2 });
         const output = [stdout, stderr].filter(Boolean).join("\n");
         return { tool: call.tool, ok: true, output: truncate(output || "(no output)", maxOutputChars) };

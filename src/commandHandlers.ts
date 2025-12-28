@@ -113,17 +113,19 @@ function buildEndpointSelectOptions(settings: AppSettings): PromptSelectOption[]
 function buildApiKeySelectOptions(): PromptSelectOption[] {
   const options: PromptSelectOption[] = [];
   if (process.env.LITELLM_API_KEY) {
+    const key = process.env.LITELLM_API_KEY;
     options.push({
       name: "Use LITELLM_API_KEY",
-      description: "Apply the LiteLLM API key from env",
-      value: process.env.LITELLM_API_KEY,
+      description: `Apply the LiteLLM API key from env (***${key.slice(-4)})`,
+      value: key,
     });
   }
   if (process.env.OPENAI_API_KEY) {
+    const key = process.env.OPENAI_API_KEY;
     options.push({
       name: "Use OPENAI_API_KEY",
-      description: "Apply the OpenAI API key from env",
-      value: process.env.OPENAI_API_KEY,
+      description: `Apply the OpenAI API key from env (***${key.slice(-4)})`,
+      value: key,
     });
   }
   options.push({ name: "Custom…", description: "Type a custom API key", value: CUSTOM_SELECT_VALUE });
@@ -384,10 +386,8 @@ function handleSettingCommand(
   const storedValue = settings[settingKey];
   const displayValue = storedValue || "Not set";
   const masked =
-    options?.shouldMaskValue && typeof displayValue === "string"
-      ? displayValue
-        ? "***" + displayValue.slice(-4)
-        : "Not set"
+    options?.shouldMaskValue && typeof storedValue === "string" && storedValue
+      ? "***" + storedValue.slice(-4)
       : displayValue;
 
   const openInputPrompt = () => {
