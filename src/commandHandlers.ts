@@ -398,7 +398,7 @@ function handleSettingCommand(
         : storedValue;
     setPrompt({
       type: "input",
-      message: promptMessage,
+      message: `${promptMessage} (current: ${masked})`,
       defaultValue,
       placeholder: options?.placeholder || "Type and press Enter",
       onConfirm: (value: string) => {
@@ -425,7 +425,7 @@ function handleSettingCommand(
     const selectedIndex = selectIndexForValue(options.selectOptions, storedValue);
     setPrompt({
       type: "select",
-      message: promptMessage,
+      message: `${promptMessage} (current: ${masked})`,
       options: options.selectOptions,
       selectedIndex,
       onSelect: (option) => {
