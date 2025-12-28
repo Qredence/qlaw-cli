@@ -362,7 +362,7 @@ function handleSettingCommand(
     selectOptions?: PromptSelectOption[];
   }
 ): CommandResult {
-  const { settings, setSettings, setMessages, setPrompt } = context;
+  const { settings, setMessages, setPrompt } = context;
   const val = args?.trim();
   const applyValue =
     options?.applyValue ||
@@ -398,7 +398,7 @@ function handleSettingCommand(
         : storedValue;
     setPrompt({
       type: "input",
-      message: promptMessage,
+      message: `${promptMessage} (current: ${masked})`,
       defaultValue,
       placeholder: options?.placeholder || "Type and press Enter",
       onConfirm: (value: string) => {
@@ -425,7 +425,7 @@ function handleSettingCommand(
     const selectedIndex = selectIndexForValue(options.selectOptions, storedValue);
     setPrompt({
       type: "select",
-      message: promptMessage,
+      message: `${promptMessage} (current: ${masked})`,
       options: options.selectOptions,
       selectedIndex,
       onSelect: (option) => {
@@ -456,8 +456,6 @@ function handleSettingCommand(
   openInputPrompt();
   return { shouldReturn: true };
 
-  const msg = `${promptMessage}\nCurrent: ${masked}\nUsage: /${settingKey} <value>`;
-  return { systemMessage: { id: generateUniqueId(), role: "system", content: msg, timestamp: new Date() } };
 }
 
 export function handleModelCommand(
