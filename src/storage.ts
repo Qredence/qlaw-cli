@@ -22,11 +22,9 @@ const LITELLM_BASE_URL = process.env.LITELLM_BASE_URL;
 const LITELLM_API_KEY = process.env.LITELLM_API_KEY;
 const LITELLM_MODEL = process.env.LITELLM_MODEL;
 const LLM_PROVIDER = process.env.LLM_PROVIDER;
-const HAS_LITELLM_ENV = Boolean(LITELLM_BASE_URL || LITELLM_API_KEY || LITELLM_MODEL);
-const HAS_OPENAI_ENV = Boolean(OPENAI_BASE_URL || OPENAI_API_KEY || OPENAI_MODEL);
-const PREFER_LITELLM =
-  (LLM_PROVIDER || "").toLowerCase() === "litellm" ||
-  (HAS_LITELLM_ENV && !HAS_OPENAI_ENV);
+const NORMALIZED_PROVIDER = (LLM_PROVIDER || "").toLowerCase();
+const DEFAULT_PROVIDER = NORMALIZED_PROVIDER || "litellm";
+const PREFER_LITELLM = DEFAULT_PROVIDER === "litellm";
 const AF_BRIDGE_BASE_URL = process.env.AF_BRIDGE_BASE_URL;
 const AF_MODEL = process.env.AF_MODEL;
 const FOUNDRY_ENDPOINT = process.env.FOUNDRY_ENDPOINT;
@@ -38,7 +36,7 @@ export const defaultSettings: AppSettings = {
   model: PREFER_LITELLM ? (LITELLM_MODEL || OPENAI_MODEL) : (OPENAI_MODEL || LITELLM_MODEL),
   endpoint: PREFER_LITELLM ? (LITELLM_BASE_URL || OPENAI_BASE_URL) : (OPENAI_BASE_URL || LITELLM_BASE_URL),
   apiKey: PREFER_LITELLM ? (LITELLM_API_KEY || OPENAI_API_KEY) : (OPENAI_API_KEY || LITELLM_API_KEY),
-  provider: LLM_PROVIDER,
+  provider: DEFAULT_PROVIDER,
   version: 1,
   keybindings: defaultKeybindings,
   afBridgeBaseUrl: AF_BRIDGE_BASE_URL,

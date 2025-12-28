@@ -50,25 +50,14 @@ export function applyProviderDefaults(settings: AppSettings, provider?: string):
   const next: AppSettings = { ...settings, provider: normalized };
 
   if (normalized === "litellm") {
-    if (isOpenAIEndpoint(next.endpoint, env.openaiBaseUrl)) {
-      next.endpoint = env.litellmBaseUrl || undefined;
-    } else if (!env.litellmBaseUrl && next.endpoint) {
-      // Leave custom endpoint, but clear OpenAI defaults when LiteLLM envs are missing
-      next.endpoint = isOpenAIEndpoint(next.endpoint, env.openaiBaseUrl) ? undefined : next.endpoint;
+    if (env.litellmBaseUrl && isOpenAIEndpoint(next.endpoint, env.openaiBaseUrl)) {
+      next.endpoint = env.litellmBaseUrl;
     }
-    if (env.litellmModel) {
-      if (looksLikeOpenAIModel(next.model, env.openaiModel)) {
-        next.model = env.litellmModel;
-      }
-    } else if (looksLikeOpenAIModel(next.model, env.openaiModel)) {
-      next.model = undefined;
+    if (env.litellmModel && looksLikeOpenAIModel(next.model, env.openaiModel)) {
+      next.model = env.litellmModel;
     }
-    if (env.litellmApiKey) {
-      if (!next.apiKey || (env.openaiApiKey && next.apiKey === env.openaiApiKey)) {
-        next.apiKey = env.litellmApiKey;
-      }
-    } else if (env.openaiApiKey && next.apiKey === env.openaiApiKey) {
-      next.apiKey = undefined;
+    if (env.litellmApiKey && (!next.apiKey || (env.openaiApiKey && next.apiKey === env.openaiApiKey))) {
+      next.apiKey = env.litellmApiKey;
     }
   }
 

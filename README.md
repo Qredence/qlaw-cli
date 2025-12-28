@@ -84,6 +84,12 @@ cp .env.example .env
 # Add your OpenAI API key to .env
 # OPENAI_API_KEY=your-key-here
 
+# LiteLLM (default provider) example
+# LITELLM_BASE_URL=http://localhost:4000/v1
+# LITELLM_API_KEY=your-key-here
+# LITELLM_MODEL=openai/gpt-4o-mini
+# LITELLM_MODELS=openai/gpt-4o-mini,openai/gpt-4o
+
 # Run locally
 bun run start
 

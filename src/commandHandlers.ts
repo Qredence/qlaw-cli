@@ -13,6 +13,7 @@ import { generateUniqueId } from "./utils.ts";
 import { defaultKeybindings } from "./storage.ts";
 import { listAgents } from "./api.ts";
 import { applyProviderDefaults } from "./llm/providerDefaults.ts";
+import { parseModelList } from "./llm/models.ts";
 import { exec } from "child_process";
 import { promisify } from "util";
 
@@ -40,8 +41,18 @@ function selectIndexForValue(options: PromptSelectOption[], value?: string): num
 
 function buildModelSelectOptions(settings: AppSettings): PromptSelectOption[] {
   const options: PromptSelectOption[] = [];
+  const envModels = parseModelList(process.env.LITELLM_MODELS);
   if (settings.model) {
     options.push({ name: settings.model, description: "Current value", value: settings.model });
+  }
+  if (envModels.length > 0) {
+    envModels.forEach((model) => {
+      options.push({
+        name: model,
+        description: "From LITELLM_MODELS",
+        value: model,
+      });
+    });
   }
   if (process.env.LITELLM_MODEL) {
     options.push({

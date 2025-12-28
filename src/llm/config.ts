@@ -20,15 +20,12 @@ function normalizeProvider(value: string | undefined): LlmProvider | undefined {
 
 function inferProvider(
   baseUrl: string | undefined,
-  model: string | undefined,
-  hasLitellmEnv: boolean,
-  hasOpenaiEnv: boolean
+  model: string | undefined
 ): LlmProvider {
   const url = baseUrl || "";
   if (url.includes("azure.com") || url.includes("/openai/")) return "azure";
   if (url.includes("litellm") || url.includes("/llm/") || (model && model.includes("/"))) return "litellm";
-  if (hasLitellmEnv && !hasOpenaiEnv) return "litellm";
-  return "openai";
+  return "litellm";
 }
 
 export function resolveLlmConfig(settings?: AppSettings): LlmConfig | null {
@@ -43,13 +40,9 @@ export function resolveLlmConfig(settings?: AppSettings): LlmConfig | null {
   };
 
   const providerHint = normalizeProvider(settings?.provider) || normalizeProvider(env.llmProvider);
-  const hasLitellmEnv = Boolean(env.litellmBaseUrl || env.litellmApiKey || env.litellmModel);
-  const hasOpenaiEnv = Boolean(env.openaiBaseUrl || env.openaiApiKey || env.openaiModel);
   const inferredProvider = inferProvider(
-    settings?.endpoint || env.openaiBaseUrl || env.litellmBaseUrl,
-    settings?.model || env.openaiModel || env.litellmModel,
-    hasLitellmEnv,
-    hasOpenaiEnv
+    settings?.endpoint || env.litellmBaseUrl || env.openaiBaseUrl,
+    settings?.model || env.litellmModel || env.openaiModel
   );
   const provider = providerHint || inferredProvider;
 
@@ -58,9 +51,9 @@ export function resolveLlmConfig(settings?: AppSettings): LlmConfig | null {
   let model: string | undefined;
 
   if (provider === "litellm") {
-    baseUrl = settings?.endpoint || env.litellmBaseUrl;
-    apiKey = settings?.apiKey || env.litellmApiKey;
-    model = settings?.model || env.litellmModel;
+    baseUrl = settings?.endpoint || env.litellmBaseUrl || env.openaiBaseUrl || DEFAULT_OPENAI_BASE_URL;
+    apiKey = settings?.apiKey || env.litellmApiKey || env.openaiApiKey;
+    model = settings?.model || env.litellmModel || env.openaiModel;
   } else if (provider === "openai" || provider === "azure") {
     baseUrl = settings?.endpoint || env.openaiBaseUrl || DEFAULT_OPENAI_BASE_URL;
     apiKey = settings?.apiKey || env.openaiApiKey;

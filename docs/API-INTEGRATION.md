@@ -64,13 +64,14 @@ LITELLM_API_KEY=sk-...   # optional if your proxy enforces keys
 LITELLM_MODEL=openai/gpt-4o-mini
 # or
 LITELLM_MODEL=anthropic/claude-3-5-sonnet-20241022
+LITELLM_MODELS=openai/gpt-4o-mini,anthropic/claude-3-5-sonnet-20241022
 
 # Optional: force provider detection
 LLM_PROVIDER=litellm
 ```
 
 You can also set these via `/provider`, `/endpoint`, `/api-key`, and `/model` inside the CLI.
-When you switch `/provider litellm`, the CLI will prefer `LITELLM_*` envs and clear any OpenAI defaults if they were still in use.
+When you switch `/provider litellm`, the CLI will prefer `LITELLM_*` envs when present.
 
 ---
 
@@ -206,17 +207,18 @@ OPENAI_MODEL=mistral-medium
 ### Complete Reference
 
 ```bash
-# OpenAI (default)
+# OpenAI (optional)
 OPENAI_API_KEY=sk-...
 OPENAI_MODEL=gpt-4                    # Default model
 OPENAI_BASE_URL=https://api.openai.com/v1
 OPENAI_TEMPERATURE=0.7                # 0.0 to 2.0
 OPENAI_MAX_TOKENS=2000               # Max response length
 
-# LiteLLM (OpenAI-compatible proxy)
+# LiteLLM (default, OpenAI-compatible proxy)
 LITELLM_BASE_URL=http://localhost:4000/v1
 LITELLM_API_KEY=sk-...
 LITELLM_MODEL=openai/gpt-4o-mini
+LITELLM_MODELS=openai/gpt-4o-mini,openai/gpt-4o
 LLM_PROVIDER=litellm
 
 # Azure OpenAI (alternative)

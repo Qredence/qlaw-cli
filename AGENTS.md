@@ -20,7 +20,7 @@ uv pip install -r bridge/requirements.txt   # install bridge runtime deps
 - `bun run dev` – hot reload terminal UI.
 - `bun run start` – production-ish run.
 - `bun run cli:af` – boot CLI wired to the bridge (defaults: `AF_BRIDGE_BASE_URL=http://127.0.0.1:8081`, `AF_MODEL=multi_tier_support`).
-- Env switches: `OPENAI_BASE_URL`, `OPENAI_API_KEY`, `OPENAI_MODEL`, `LITELLM_BASE_URL`, `LITELLM_API_KEY`, `LITELLM_MODEL`, `LLM_PROVIDER`, `AF_BRIDGE_BASE_URL`, `AF_MODEL`.
+- Env switches: `OPENAI_BASE_URL`, `OPENAI_API_KEY`, `OPENAI_MODEL`, `LITELLM_BASE_URL`, `LITELLM_API_KEY`, `LITELLM_MODEL`, `LITELLM_MODELS`, `LLM_PROVIDER`, `AF_BRIDGE_BASE_URL`, `AF_MODEL`.
 
 ## Settings & Configuration Flow
 - All preferences persist to `~/.qlaw-cli/qlaw_settings.json` (auto-created on first run).

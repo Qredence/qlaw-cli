@@ -95,7 +95,7 @@ export function useSettings(options: UseSettingsOptions): UseSettingsReturn {
             id: "provider",
             label: "Provider",
             value: settings.provider || "Auto",
-            description: "openai | azure | litellm | custom (auto-detect if empty)",
+            description: "openai | azure | litellm | custom (default: litellm)",
             type: "text" as const,
             onActivate: () =>
               openSettingPrompt({
@@ -110,7 +110,7 @@ export function useSettings(options: UseSettingsOptions): UseSettingsReturn {
             id: "model",
             label: "Model",
             value: settings.model || "Not set",
-            description: "Default model (LiteLLM format supported)",
+            description: "Default model (from LITELLM_MODELS if set)",
             type: "text" as const,
             onActivate: () =>
               openSettingPrompt({
