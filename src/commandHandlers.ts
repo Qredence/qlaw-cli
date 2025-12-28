@@ -456,8 +456,6 @@ function handleSettingCommand(
   openInputPrompt();
   return { shouldReturn: true };
 
-  const msg = `${promptMessage}\nCurrent: ${masked}\nUsage: /${settingKey} <value>`;
-  return { systemMessage: { id: generateUniqueId(), role: "system", content: msg, timestamp: new Date() } };
 }
 
 export function handleModelCommand(
