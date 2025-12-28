@@ -19,7 +19,7 @@ export interface UseSettingsReturn {
       label: string;
       value: string;
       description: string;
-      type: "text" | "toggle";
+      type: "text" | "toggle" | "info";
       onActivate: () => void;
     }>;
   }>;
@@ -82,7 +82,7 @@ export function useSettings(options: UseSettingsOptions): UseSettingsReturn {
     [setPrompt]
   );
 
-  const settingsSections = useMemo(() => {
+  const settingsSections = useMemo<UseSettingsReturn["settingsSections"]>(() => {
     const workflowEnabled = settings.workflow?.enabled ?? false;
     const maskedKey = settings.apiKey
       ? "***" + settings.apiKey.slice(-4)
@@ -147,6 +147,41 @@ export function useSettings(options: UseSettingsOptions): UseSettingsReturn {
                 placeholder: "sk-...",
                 onSubmit: (value) => setStringSetting("apiKey", value),
               }),
+          },
+        ],
+      },
+      {
+        title: "Providers",
+        items: [
+          {
+            id: "useLitellmEnv",
+            label: "Apply LiteLLM env defaults",
+            value: "Use LITELLM_*",
+            description: "Sets endpoint/model/key from LITELLM_* and clears OpenAI defaults",
+            type: "info" as const,
+            onActivate: () => setSettings((prev) => applyProviderDefaults(prev, "litellm")),
+          },
+          {
+            id: "useOpenaiEnv",
+            label: "Apply OpenAI env defaults",
+            value: "Use OPENAI_*",
+            description: "Sets endpoint/model/key from OPENAI_* and clears LiteLLM defaults",
+            type: "info" as const,
+            onActivate: () => setSettings((prev) => applyProviderDefaults(prev, "openai")),
+          },
+          {
+            id: "clearOverrides",
+            label: "Clear API overrides",
+            value: "Reset",
+            description: "Clears endpoint/model/key so env defaults apply on next launch",
+            type: "info" as const,
+            onActivate: () =>
+              setSettings((prev) => ({
+                ...prev,
+                endpoint: undefined,
+                model: undefined,
+                apiKey: undefined,
+              })),
           },
         ],
       },
@@ -277,7 +312,7 @@ export function useSettings(options: UseSettingsOptions): UseSettingsReturn {
     ];
   }, [settings, openSettingPrompt, setSettings, setStringSetting]);
 
-  const flatSettingsItems = useMemo(
+  const flatSettingsItems = useMemo<UseSettingsReturn["flatSettingsItems"]>(
     () => settingsSections.flatMap((section) => section.items),
     [settingsSections]
   );

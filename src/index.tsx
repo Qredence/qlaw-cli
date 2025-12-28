@@ -344,6 +344,7 @@ function App() {
     sessionFocusIndex,
     setSessionFocusIndex,
     handleSessionActivate,
+    settingsSections,
     flatSettingsItems,
     settingsFocusIndex,
     setSettingsFocusIndex,
@@ -662,6 +663,7 @@ function App() {
           input={input}
           inputMode={currentInputMode}
           isProcessing={isProcessing}
+          isFocused={!showSettingsMenu && !showSessionList && !prompt}
           placeholder={inputPlaceholder}
           hint={inputHint}
           colors={COLORS}

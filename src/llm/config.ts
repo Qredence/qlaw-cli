@@ -18,10 +18,16 @@ function normalizeProvider(value: string | undefined): LlmProvider | undefined {
   return undefined;
 }
 
-function inferProvider(baseUrl: string | undefined, model: string | undefined): LlmProvider {
+function inferProvider(
+  baseUrl: string | undefined,
+  model: string | undefined,
+  hasLitellmEnv: boolean,
+  hasOpenaiEnv: boolean
+): LlmProvider {
   const url = baseUrl || "";
   if (url.includes("azure.com") || url.includes("/openai/")) return "azure";
   if (url.includes("litellm") || url.includes("/llm/") || (model && model.includes("/"))) return "litellm";
+  if (hasLitellmEnv && !hasOpenaiEnv) return "litellm";
   return "openai";
 }
 
@@ -37,9 +43,13 @@ export function resolveLlmConfig(settings?: AppSettings): LlmConfig | null {
   };
 
   const providerHint = normalizeProvider(settings?.provider) || normalizeProvider(env.llmProvider);
+  const hasLitellmEnv = Boolean(env.litellmBaseUrl || env.litellmApiKey || env.litellmModel);
+  const hasOpenaiEnv = Boolean(env.openaiBaseUrl || env.openaiApiKey || env.openaiModel);
   const inferredProvider = inferProvider(
     settings?.endpoint || env.openaiBaseUrl || env.litellmBaseUrl,
-    settings?.model || env.openaiModel || env.litellmModel
+    settings?.model || env.openaiModel || env.litellmModel,
+    hasLitellmEnv,
+    hasOpenaiEnv
   );
   const provider = providerHint || inferredProvider;
 

@@ -18,6 +18,20 @@ function isOpenAIEndpoint(endpoint: string | undefined, envOpenaiBase: string | 
   return endpoint.includes("api.openai.com");
 }
 
+function looksLikeOpenAIModel(model: string | undefined, envOpenaiModel: string | undefined): boolean {
+  if (!model) return true;
+  if (envOpenaiModel && model === envOpenaiModel) return true;
+  if (model.includes("/")) return false;
+  const lower = model.toLowerCase();
+  return (
+    lower.startsWith("gpt-") ||
+    lower.startsWith("o1") ||
+    lower.startsWith("o3") ||
+    lower.startsWith("gpt4") ||
+    lower.startsWith("gpt3")
+  );
+}
+
 export function applyProviderDefaults(settings: AppSettings, provider?: string): AppSettings {
   const normalized = normalizeProvider(provider);
   if (!normalized) {
@@ -38,12 +52,23 @@ export function applyProviderDefaults(settings: AppSettings, provider?: string):
   if (normalized === "litellm") {
     if (isOpenAIEndpoint(next.endpoint, env.openaiBaseUrl)) {
       next.endpoint = env.litellmBaseUrl || undefined;
+    } else if (!env.litellmBaseUrl && next.endpoint) {
+      // Leave custom endpoint, but clear OpenAI defaults when LiteLLM envs are missing
+      next.endpoint = isOpenAIEndpoint(next.endpoint, env.openaiBaseUrl) ? undefined : next.endpoint;
     }
-    if (!next.model || (env.openaiModel && next.model === env.openaiModel)) {
-      next.model = env.litellmModel || undefined;
+    if (env.litellmModel) {
+      if (looksLikeOpenAIModel(next.model, env.openaiModel)) {
+        next.model = env.litellmModel;
+      }
+    } else if (looksLikeOpenAIModel(next.model, env.openaiModel)) {
+      next.model = undefined;
     }
-    if (!next.apiKey || (env.openaiApiKey && next.apiKey === env.openaiApiKey)) {
-      next.apiKey = env.litellmApiKey || undefined;
+    if (env.litellmApiKey) {
+      if (!next.apiKey || (env.openaiApiKey && next.apiKey === env.openaiApiKey)) {
+        next.apiKey = env.litellmApiKey;
+      }
+    } else if (env.openaiApiKey && next.apiKey === env.openaiApiKey) {
+      next.apiKey = undefined;
     }
   }
 

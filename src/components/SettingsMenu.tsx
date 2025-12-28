@@ -23,7 +23,26 @@ export function SettingsMenu({
   focusIndex,
   colors,
 }: SettingsMenuProps) {
-  let itemIndex = -1;
+  const flatItems = sections.flatMap((section) => section.items);
+  const selectedItem = flatItems[focusIndex];
+  let rangeCursor = 0;
+  const sectionRanges = sections.map((section) => {
+    const start = rangeCursor;
+    const end = rangeCursor + section.items.length - 1;
+    rangeCursor += section.items.length;
+    return { start, end };
+  });
+  const rawActiveIndex = sectionRanges.findIndex(
+    (r) => focusIndex >= r.start && focusIndex <= r.end
+  );
+  const activeSectionIndex = rawActiveIndex >= 0 ? rawActiveIndex : 0;
+  const activeSection = sections[activeSectionIndex];
+  const activeRange = sectionRanges[activeSectionIndex] || { start: 0, end: -1 };
+  const activeItems = activeSection?.items || [];
+  const localFocusIndex = Math.max(0, focusIndex - activeRange.start);
+  const listHeight = 14;
+  const detailWidth = 34;
+
   return (
     <box
       style={{
@@ -54,8 +73,8 @@ export function SettingsMenu({
               key={`tab-${s.title}`}
               style={{
                 border: true,
-                borderColor: idx === 0 ? colors.text.accent : colors.border,
-                backgroundColor: idx === 0 ? colors.bg.hover : colors.bg.panel,
+                borderColor: idx === activeSectionIndex ? colors.text.accent : colors.border,
+                backgroundColor: idx === activeSectionIndex ? colors.bg.hover : colors.bg.panel,
                 paddingLeft: 1,
                 paddingRight: 1,
                 height: 1,
@@ -66,39 +85,48 @@ export function SettingsMenu({
           ))}
         </box>
         <text
-          content="↑↓ navigate · Enter edit/toggle · Esc close"
+          content="↑↓ item · ←→ section · Enter edit/toggle · Esc close"
           style={{ fg: colors.text.dim, attributes: TextAttributes.DIM }}
         />
-        {sections.map((section) => (
-          <box
-            key={section.title}
-            flexDirection="column"
-            style={{ marginTop: 1 }}
+        <box style={{ flexDirection: "row", gap: 2, marginTop: 1 }}>
+          <scrollbox
+            style={{
+              flexGrow: 1,
+              height: listHeight,
+              border: true,
+              borderColor: colors.border,
+              padding: 1,
+              backgroundColor: colors.bg.panel,
+            }}
           >
-            <text
-              content={section.title}
-              style={{
-                fg: colors.text.secondary,
-                attributes: TextAttributes.BOLD,
-              }}
-            />
-            {section.items.map((item) => {
-              itemIndex += 1;
-              const isSelected = focusIndex === itemIndex;
+            {activeSection && (
+              <text
+                content={activeSection.title}
+                style={{
+                  fg: colors.text.secondary,
+                  attributes: TextAttributes.BOLD,
+                  marginBottom: 1,
+                }}
+              />
+            )}
+            {activeItems.length === 0 && (
+              <text
+                content="No settings available."
+                style={{ fg: colors.text.dim, attributes: TextAttributes.DIM }}
+              />
+            )}
+            {activeItems.map((item, idx) => {
+              const isSelected = localFocusIndex === idx;
               return (
                 <box
                   key={item.id}
                   flexDirection="column"
                   style={{
-                    marginTop: 1,
+                    marginTop: idx === 0 ? 0 : 1,
                     padding: 1,
                     border: true,
-                    borderColor: isSelected
-                      ? colors.text.accent
-                      : colors.border,
-                    backgroundColor: isSelected
-                      ? colors.bg.hover
-                      : colors.bg.panel,
+                    borderColor: isSelected ? colors.text.accent : colors.border,
+                    backgroundColor: isSelected ? colors.bg.hover : colors.bg.panel,
                   }}
                 >
                   <box style={{ justifyContent: "space-between" }}>
@@ -127,8 +155,61 @@ export function SettingsMenu({
                 </box>
               );
             })}
+          </scrollbox>
+          <box
+            flexDirection="column"
+            style={{
+              width: detailWidth,
+              height: listHeight,
+              border: true,
+              borderColor: colors.border,
+              padding: 1,
+              backgroundColor: colors.bg.panel,
+            }}
+          >
+            <text
+              content="Details"
+              style={{
+                fg: colors.text.secondary,
+                attributes: TextAttributes.BOLD,
+                marginBottom: 1,
+              }}
+            />
+            {selectedItem ? (
+              <>
+                <text
+                  content={selectedItem.label}
+                  style={{ fg: colors.text.primary, attributes: TextAttributes.BOLD }}
+                />
+                <text
+                  content={`Value: ${selectedItem.value}`}
+                  style={{ fg: colors.text.secondary, marginTop: 1 }}
+                />
+                {selectedItem.description && (
+                  <text
+                    content={selectedItem.description}
+                    style={{ fg: colors.text.tertiary, marginTop: 1 }}
+                  />
+                )}
+                <text
+                  content={
+                    selectedItem.type === "toggle"
+                      ? "Enter to toggle"
+                      : selectedItem.type === "info"
+                      ? "Enter to run"
+                      : "Enter to edit"
+                  }
+                  style={{ fg: colors.text.dim, attributes: TextAttributes.DIM, marginTop: 1 }}
+                />
+              </>
+            ) : (
+              <text
+                content="No setting selected."
+                style={{ fg: colors.text.dim, attributes: TextAttributes.DIM }}
+              />
+            )}
           </box>
-        ))}
+        </box>
         <text
           content={
             "\nTip: /keybindings set <action> <binding> to update suggestion keys.\nUse /af-bridge + /af-model to point workflow mode at a new agent-framework bridge."
