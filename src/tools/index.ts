@@ -114,6 +114,22 @@ export async function executeToolCall(call: ToolCall, options: ToolExecutionOpti
       case "run_command": {
         const command = String(args.command || "").trim();
         if (!command) throw new Error("Missing command");
+        
+        // Basic safety check for extremely dangerous command patterns
+        const dangerousPatterns = [
+          /rm\s+(-[rfRF]*\s*)*\/\s*$/,  // rm -rf / or rm -r / etc.
+          />\s*\/dev\/(sda|hda|nvme)/,  // writing to disk devices
+          /dd\s+.*of=\/dev\/(sda|hda|nvme)/,  // dd to disk devices
+          /mkfs/,  // filesystem formatting
+          /:\(\)\{\s*:\|:&\s*\};:/,  // fork bomb
+        ];
+        
+        for (const pattern of dangerousPatterns) {
+          if (pattern.test(command)) {
+            throw new Error("Command blocked: potentially destructive operation detected");
+          }
+        }
+        
         const { stdout, stderr } = await execAsync(command, { cwd, maxBuffer: maxOutputChars * 2 });
         const output = [stdout, stderr].filter(Boolean).join("\n");
         return { tool: call.tool, ok: true, output: truncate(output || "(no output)", maxOutputChars) };
