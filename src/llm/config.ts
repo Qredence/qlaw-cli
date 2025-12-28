@@ -23,7 +23,37 @@ function inferProvider(
   model: string | undefined
 ): LlmProvider {
   const url = baseUrl || "";
-  if (url.includes("azure.com") || url.includes("/openai/")) return "azure";
+
+  let hostname: string | undefined;
+  try {
+    if (url) {
+      // Use built-in URL parser when an absolute URL is provided.
+      const parsed = new URL(url);
+      hostname = parsed.hostname.toLowerCase();
+    }
+  } catch {
+    // Ignore parse errors; hostname will remain undefined and we will
+    // fall back to non-hostname heuristics below.
+  }
+
+  if (hostname) {
+    const host = hostname;
+    // Azure OpenAI endpoints are typically of the form:
+    //   {resource-name}.openai.azure.com
+    // Treat such hosts, or direct azure.com hosts, as Azure.
+    if (
+      host === "azure.com" ||
+      host.endsWith(".azure.com") ||
+      host.includes(".openai.azure.com")
+    ) {
+      return "azure";
+    }
+  } else if (url.includes("/openai/")) {
+    // When we cannot reliably determine the hostname (e.g. relative URLs),
+    // fall back to path-based heuristics only.
+    return "azure";
+  }
+
   if (url.includes("litellm") || url.includes("/llm/") || (model && model.includes("/"))) return "litellm";
   return "litellm";
 }
