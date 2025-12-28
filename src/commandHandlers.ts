@@ -113,15 +113,19 @@ function buildEndpointSelectOptions(settings: AppSettings): PromptSelectOption[]
 function buildApiKeySelectOptions(): PromptSelectOption[] {
   const options: PromptSelectOption[] = [];
   if (process.env.LITELLM_API_KEY) {
+    const key = process.env.LITELLM_API_KEY;
+    const masked = key.length > 4 ? "***" + key.slice(-4) : "***";
     options.push({
-      name: "Use LITELLM_API_KEY",
+      name: `Use LITELLM_API_KEY (${masked})`,
       description: "Apply the LiteLLM API key from env",
       value: process.env.LITELLM_API_KEY,
     });
   }
   if (process.env.OPENAI_API_KEY) {
+    const key = process.env.OPENAI_API_KEY;
+    const masked = key.length > 4 ? "***" + key.slice(-4) : "***";
     options.push({
-      name: "Use OPENAI_API_KEY",
+      name: `Use OPENAI_API_KEY (${masked})`,
       description: "Apply the OpenAI API key from env",
       value: process.env.OPENAI_API_KEY,
     });
@@ -383,12 +387,9 @@ function handleSettingCommand(
 
   const storedValue = settings[settingKey];
   const displayValue = storedValue || "Not set";
-  const masked =
-    options?.shouldMaskValue && typeof displayValue === "string"
-      ? displayValue
-        ? "***" + displayValue.slice(-4)
-        : "Not set"
-      : displayValue;
+  const masked = options?.shouldMaskValue && typeof displayValue === "string" && displayValue
+    ? "***" + displayValue.slice(-4)
+    : displayValue;
 
   const openInputPrompt = () => {
     if (!setPrompt) return;
@@ -455,7 +456,6 @@ function handleSettingCommand(
 
   openInputPrompt();
   return { shouldReturn: true };
-
 }
 
 export function handleModelCommand(

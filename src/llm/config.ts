@@ -94,13 +94,11 @@ export function resolveLlmConfig(settings?: AppSettings): LlmConfig | null {
     model = settings?.model;
   }
 
-  const resolvedBaseUrl = baseUrl;
-
-  if (!resolvedBaseUrl || !apiKey || !model) return null;
+  if (!baseUrl || !apiKey || !model) return null;
 
   return {
     provider,
-    baseUrl: resolvedBaseUrl,
+    baseUrl,
     apiKey,
     model,
   };

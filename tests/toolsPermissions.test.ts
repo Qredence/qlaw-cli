@@ -2,7 +2,7 @@ import { expect, test, describe } from "bun:test";
 import { mkdtempSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import { isExternalPath } from "../src/tools/permissions";
+import { isExternalPath } from "../src/utils/pathUtils";
 
 describe("isExternalPath", () => {
   test("returns false for paths inside cwd", () => {

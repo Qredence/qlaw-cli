@@ -44,10 +44,17 @@ function looksLikeOpenAIModel(model: string | undefined, envOpenaiModel: string 
   if (envOpenaiModel && model === envOpenaiModel) return true;
   if (model.includes("/")) return false;
   const lower = model.toLowerCase();
+  // More specific matching to avoid false positives like "o10", "o100", etc.
   return (
     lower.startsWith("gpt-") ||
-    lower.startsWith("o1") ||
-    lower.startsWith("o3") ||
+    lower === "o1" ||
+    lower === "o1-preview" ||
+    lower === "o1-mini" ||
+    lower === "o3" ||
+    lower === "o3-preview" ||
+    lower === "o3-mini" ||
+    lower.startsWith("o1-") ||
+    lower.startsWith("o3-") ||
     lower.startsWith("gpt4") ||
     lower.startsWith("gpt3")
   );

@@ -1,6 +1,6 @@
-import { resolve, relative, isAbsolute } from "path";
 import type { AppSettings, PermissionMode } from "../types.ts";
 import type { ToolCall, ToolName } from "./index.ts";
+import { isExternalPath } from "../utils/pathUtils.ts";
 
 const DEFAULT_PERMISSIONS: Record<ToolName | "external_directory" | "doom_loop", PermissionMode> = {
   read_file: "allow",
@@ -10,14 +10,6 @@ const DEFAULT_PERMISSIONS: Record<ToolName | "external_directory" | "doom_loop",
   external_directory: "ask",
   doom_loop: "ask",
 };
-
-export function isExternalPath(path: string, cwd: string): boolean {
-  const resolved = resolve(cwd, path);
-  const root = resolve(cwd);
-  const rel = relative(root, resolved);
-  if (!rel) return false;
-  return rel.startsWith("..") || isAbsolute(rel);
-}
 
 function getPermission(settings: AppSettings, key: keyof typeof DEFAULT_PERMISSIONS): PermissionMode {
   return settings.tools?.permissions?.[key] || DEFAULT_PERMISSIONS[key];

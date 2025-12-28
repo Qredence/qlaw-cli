@@ -4,7 +4,8 @@
  */
 
 import { readFile } from "fs/promises";
-import { resolve, extname, relative, isAbsolute } from "path";
+import { resolve, extname } from "path";
+import { isExternalPath } from "./utils/pathUtils.ts";
 
 export type MentionType =
   | "context"
@@ -171,12 +172,6 @@ async function formatMentionAsync(
   } catch (e: any) {
     return `[File Reference: ${path}]\n\nUnable to read file (${e?.message || e}). Please verify the path.`;
   }
-}
-
-function isExternalPath(targetPath: string, cwd: string): boolean {
-  const rel = relative(cwd, targetPath);
-  if (!rel) return false;
-  return rel.startsWith("..") || isAbsolute(rel);
 }
 
 function guessLanguage(path: string): string {
