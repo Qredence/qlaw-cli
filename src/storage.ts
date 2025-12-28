@@ -18,6 +18,10 @@ export const defaultKeybindings: Record<Action, KeySpec[]> = {
 const OPENAI_BASE_URL = process.env.OPENAI_BASE_URL;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const OPENAI_MODEL = process.env.OPENAI_MODEL;
+const LITELLM_BASE_URL = process.env.LITELLM_BASE_URL;
+const LITELLM_API_KEY = process.env.LITELLM_API_KEY;
+const LITELLM_MODEL = process.env.LITELLM_MODEL;
+const LLM_PROVIDER = process.env.LLM_PROVIDER;
 const AF_BRIDGE_BASE_URL = process.env.AF_BRIDGE_BASE_URL;
 const AF_MODEL = process.env.AF_MODEL;
 const FOUNDRY_ENDPOINT = process.env.FOUNDRY_ENDPOINT;
@@ -26,9 +30,10 @@ export const defaultSettings: AppSettings = {
   theme: "dark",
   showTimestamps: false,
   autoScroll: true,
-  model: OPENAI_MODEL,
-  endpoint: OPENAI_BASE_URL,
-  apiKey: OPENAI_API_KEY,
+  model: OPENAI_MODEL || LITELLM_MODEL,
+  endpoint: OPENAI_BASE_URL || LITELLM_BASE_URL,
+  apiKey: OPENAI_API_KEY || LITELLM_API_KEY,
+  provider: LLM_PROVIDER,
   version: 1,
   keybindings: defaultKeybindings,
   afBridgeBaseUrl: AF_BRIDGE_BASE_URL,
@@ -48,6 +53,22 @@ export const defaultSettings: AppSettings = {
     options: {
       maxSteps: 10,
       judgeThreshold: 0.6,
+    },
+  },
+  tools: {
+    enabled: false,
+    autoApprove: false,
+    maxFileBytes: 120_000,
+    maxDirEntries: 250,
+    maxOutputChars: 12_000,
+    maxSteps: 4,
+    permissions: {
+      read_file: "allow",
+      list_dir: "allow",
+      write_file: "ask",
+      run_command: "ask",
+      external_directory: "ask",
+      doom_loop: "ask",
     },
   },
 };

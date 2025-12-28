@@ -3,8 +3,9 @@
  * Extracted from index.tsx to improve code organization
  */
 
-import type { Message } from "../types.ts";
-import { getAuthHeader, buildResponsesInput, getOpenAIEnv } from "../api.ts";
+import type { Message, AppSettings } from "../types.ts";
+import { resolveLlmConfig, getAuthHeader, resolveResponsesUrl } from "../llm/config.ts";
+import { buildResponsesInput } from "../llm/input.ts";
 import { parseSSEStream } from "../sse.ts";
 import { formatRequestInfoForDisplay } from "../af.ts";
 
@@ -19,33 +20,34 @@ export interface StreamingCallbacks {
  */
 export async function streamResponseFromOpenAI(params: {
   history: Message[];
+  settings: AppSettings;
   callbacks: StreamingCallbacks;
 }): Promise<void> {
-  const { history, callbacks } = params;
+  const { history, settings, callbacks } = params;
   const { onDelta, onError, onDone } = callbacks;
 
-  const { baseUrl, apiKey, model } = getOpenAIEnv();
-  if (!baseUrl || !apiKey || !model) {
+  const config = resolveLlmConfig(settings);
+  if (!config) {
     onError(
-      new Error("Missing OPENAI_BASE_URL, OPENAI_API_KEY, or OPENAI_MODEL")
+      new Error("Missing endpoint, API key, or model. Configure /endpoint, /api-key, and /model.")
     );
     onDone();
     return;
   }
 
   try {
-    const authHeaders = getAuthHeader(baseUrl, apiKey);
+    const authHeaders = getAuthHeader(config);
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
       Accept: "text/event-stream",
       ...authHeaders,
     };
 
-    const res = await fetch(`${baseUrl.replace(/\/$/, "")}/responses`, {
+    const res = await fetch(resolveResponsesUrl(config), {
       method: "POST",
       headers,
       body: JSON.stringify({
-        model,
+        model: config.model,
         input: buildResponsesInput(history),
         stream: true,
       }),

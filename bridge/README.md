@@ -31,6 +31,13 @@ Quick start
    export OPENAI_MODEL="gpt-4o-mini"
    ```
 
+   Or LiteLLM (OpenAI-compatible proxy):
+   ```bash
+   export LITELLM_BASE_URL="http://localhost:4000/v1"
+   export LITELLM_API_KEY="sk-xxx"
+   export LITELLM_MODEL="openai/gpt-4o-mini"
+   ```
+
 3) Start the bridge (recommended):
    ```bash
    # from repo root

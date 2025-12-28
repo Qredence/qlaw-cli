@@ -23,6 +23,7 @@ export interface UseStreamingReturn {
     settings: AppSettings;
     assistantMessageId: string;
     onMessageUpdate: (updater: (prev: Message[]) => Message[]) => void;
+    onComplete?: (assistantMessageId: string) => void;
   }) => void;
 }
 
@@ -62,6 +63,7 @@ export function useStreaming(): UseStreamingReturn {
     settings: AppSettings;
     assistantMessageId: string;
     onMessageUpdate: (updater: (prev: Message[]) => Message[]) => void;
+    onComplete?: (assistantMessageId: string) => void;
   }) => {
     const {
       messages,
@@ -70,6 +72,7 @@ export function useStreaming(): UseStreamingReturn {
       settings,
       assistantMessageId,
       onMessageUpdate,
+      onComplete,
     } = params;
 
     setIsProcessing(true);
@@ -108,12 +111,14 @@ export function useStreaming(): UseStreamingReturn {
         },
         onDone: () => {
           setIsProcessing(false);
+          onComplete?.(assistantMessageId);
         },
       });
     } else {
       // Stream from OpenAI Responses API
       streamResponseFromOpenAI({
         history: messages,
+        settings,
         callbacks: {
           onDelta: (chunk) => {
             onMessageUpdate((prev) =>
@@ -135,6 +140,7 @@ export function useStreaming(): UseStreamingReturn {
           },
           onDone: () => {
             setIsProcessing(false);
+            onComplete?.(assistantMessageId);
           },
         },
       });
@@ -150,4 +156,3 @@ export function useStreaming(): UseStreamingReturn {
     streamResponse,
   };
 }
-

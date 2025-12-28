@@ -10,6 +10,13 @@ This project implements an interactive terminal chat interface similar to OpenCo
 qlaw-cli/
 ├── src/
 │   ├── index.tsx            # Main application composition
+│   ├── llm/
+│   │   ├── config.ts         # Provider resolution + auth headers
+│   │   └── input.ts          # Prompt building for Responses API
+│   ├── tools/
+│   │   ├── index.ts          # Tool registry + execution
+│   │   ├── permissions.ts    # Tool permission policy
+│   │   └── prompt.ts         # Tool-call system prompt
 │   ├── services/
 │   │   ├── commandService.ts # Command dispatch and context
 │   │   └── streamingService.ts # OpenAI-style streaming orchestration
@@ -89,6 +96,17 @@ Mention processing and formatting:
 
 Please reference the documentation for "API authentication" when providing your response.
 ```
+
+`@file` now reads and inlines file contents (truncated for safety) so the model sees actual code context.
+
+### Coding Agent Tools (`src/tools/*`)
+
+Tool execution is opt-in and permissioned:
+- `parseToolCalls()` extracts fenced JSON tool blocks.
+- `executeToolCall()` runs file and shell tools with size guards.
+- `resolveToolPermission()` enforces `allow | ask | deny` policies plus external-directory/doom-loop checks.
+
+The UI runs a tool loop: execute tools → append results → re-prompt the model to continue.
 
 ### Utilities (`src/utils.ts`)
 

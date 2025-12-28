@@ -3,7 +3,23 @@
  * Formats mentions to provide structured context to the AI
  */
 
-export type MentionType = "context" | "file" | "code" | "docs" | "coder" | "planner" | "reviewer" | "judge";
+import { readFile } from "fs/promises";
+import { resolve, extname } from "path";
+
+export type MentionType =
+  | "context"
+  | "file"
+  | "code"
+  | "docs"
+  | "coder"
+  | "planner"
+  | "reviewer"
+  | "judge";
+
+export interface MentionFormatOptions {
+  cwd: string;
+  maxFileBytes: number;
+}
 
 export interface MentionMatch {
   type: MentionType;
@@ -59,6 +75,37 @@ export function formatMessageWithMentions(message: string): string {
 }
 
 /**
+ * Async formatter that expands @file mentions with file contents.
+ */
+export async function formatMessageWithMentionsAsync(
+  message: string,
+  options: MentionFormatOptions
+): Promise<string> {
+  const mentions = detectMentions(message);
+  if (mentions.length === 0) return message;
+
+  const replacements = await Promise.all(
+    mentions.map(async (mention) => ({
+      mention,
+      formatted: await formatMentionAsync(mention.type, mention.content, options),
+    }))
+  );
+
+  let formatted = message;
+  const sorted = replacements
+    .sort((a, b) => b.mention.startIndex - a.mention.startIndex);
+
+  for (const item of sorted) {
+    formatted =
+      formatted.slice(0, item.mention.startIndex) +
+      item.formatted +
+      formatted.slice(item.mention.endIndex);
+  }
+
+  return formatted;
+}
+
+/**
  * Formats a single mention based on its type
  */
 function formatMention(type: MentionType, content: string): string {
@@ -96,6 +143,45 @@ function formatMention(type: MentionType, content: string): string {
       }
       return content;
   }
+}
+
+async function formatMentionAsync(
+  type: MentionType,
+  content: string,
+  options: MentionFormatOptions
+): Promise<string> {
+  if (type !== "file" || !content) {
+    return formatMention(type, content);
+  }
+
+  const path = content.trim();
+  if (!path) return formatMention(type, content);
+
+  try {
+    const fullPath = resolve(options.cwd, path);
+    const file = await readFile(fullPath);
+    const limited = file.length > options.maxFileBytes ? file.subarray(0, options.maxFileBytes) : file;
+    const text = limited.toString("utf-8");
+    const suffix = file.length > options.maxFileBytes ? `\n…truncated (${file.length - options.maxFileBytes} bytes)` : "";
+    const lang = guessLanguage(path);
+    return `[File: ${path}]\n\`\`\`${lang}\n${text}${suffix}\n\`\`\``;
+  } catch (e: any) {
+    return `[File Reference: ${path}]\n\nUnable to read file (${e?.message || e}). Please verify the path.`;
+  }
+}
+
+function guessLanguage(path: string): string {
+  const ext = extname(path).toLowerCase().replace(".", "");
+  if (!ext) return "text";
+  if (ext === "ts") return "typescript";
+  if (ext === "tsx") return "tsx";
+  if (ext === "js") return "javascript";
+  if (ext === "jsx") return "jsx";
+  if (ext === "py") return "python";
+  if (ext === "json") return "json";
+  if (ext === "md") return "markdown";
+  if (ext === "sh") return "bash";
+  return ext;
 }
 
 /**

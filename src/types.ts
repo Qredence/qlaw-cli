@@ -14,6 +14,8 @@ export interface Session {
 }
 
 export type ThemeName = "dark" | "light" | "dracula";
+export type LlmProvider = "openai" | "azure" | "litellm" | "custom";
+export type PermissionMode = "allow" | "ask" | "deny";
 
 export type Action = "nextSuggestion" | "prevSuggestion" | "autocomplete";
 
@@ -28,6 +30,7 @@ export interface AppSettings {
   apiKey?: string;
   endpoint?: string;
   model?: string;
+  provider?: LlmProvider | string;
   theme: ThemeName;
   showTimestamps: boolean;
   autoScroll: boolean;
@@ -56,6 +59,22 @@ export interface AppSettings {
       judgeThreshold?: number;
     };
   };
+  tools?: {
+    enabled?: boolean;
+    autoApprove?: boolean;
+    maxFileBytes?: number;
+    maxDirEntries?: number;
+    maxOutputChars?: number;
+    maxSteps?: number;
+    permissions?: {
+      read_file?: PermissionMode;
+      list_dir?: PermissionMode;
+      write_file?: PermissionMode;
+      run_command?: PermissionMode;
+      external_directory?: PermissionMode;
+      doom_loop?: PermissionMode;
+    };
+  };
 }
 
 export interface CustomCommand {
@@ -72,6 +91,7 @@ export type UISuggestion = {
   description?: string;
   kind: "command" | "custom-command" | "mention";
   score?: number;
+  keywords?: string[];
 };
 
 export type Prompt =

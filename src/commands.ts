@@ -1,6 +1,7 @@
 export type BuiltInCommandName =
   | "clear"
   | "help"
+  | "provider"
   | "model"
   | "settings"
   | "sessions"
@@ -11,6 +12,7 @@ export type BuiltInCommandName =
   | "theme"
   | "endpoint"
   | "api-key"
+  | "tools"
   | "af-bridge"
   | "af-model"
   | "keybindings"
@@ -34,6 +36,7 @@ export interface CommandMeta {
 export const BUILT_IN_COMMANDS: CommandMeta[] = [
   { name: "clear", description: "Clear all messages", keywords: ["reset", "cls"] },
   { name: "help", description: "Show help", keywords: ["docs", "commands"] },
+  { name: "provider", description: "Set the model provider", keywords: ["openai", "litellm", "azure"] },
   { name: "model", description: "Set the model name", keywords: ["ai", "llm"] },
   { name: "settings", description: "Configure application settings", keywords: ["prefs"] },
   { name: "sessions", description: "List and select previous sessions", keywords: ["history"] },
@@ -44,6 +47,7 @@ export const BUILT_IN_COMMANDS: CommandMeta[] = [
   { name: "theme", description: "Toggle theme", keywords: ["dark", "light"] },
   { name: "endpoint", description: "Set the API endpoint base URL", keywords: ["openai", "azure", "url"] },
   { name: "api-key", description: "Set the API key (masked)", keywords: ["token", "auth"] },
+  { name: "tools", description: "Toggle tool execution", keywords: ["agent", "fs", "shell"] },
   { name: "af-bridge", description: "Set Agent Framework bridge URL", keywords: ["workflow", "bridge"] },
   { name: "af-model", description: "Set Agent Framework model", keywords: ["fleet", "agents"] },
   { name: "keybindings", description: "View or edit suggestion keybindings", keywords: ["keys", "bindings"] },
@@ -75,7 +79,7 @@ export interface MentionMeta {
 
 export const MENTIONS: MentionMeta[] = [
   { name: "context", description: "Add context to your message" },
-  { name: "file", description: "Reference a file (e.g., @file path/to/file)" },
+  { name: "file", description: "Include a file (e.g., @file path/to/file)" },
   { name: "code", description: "Include a code snippet (e.g., @code your code here)" },
   { name: "docs", description: "Reference documentation (e.g., @docs topic)" },
   { name: "coder", description: "Route prompt to the Coder agent" },

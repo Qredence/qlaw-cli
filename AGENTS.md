@@ -20,13 +20,14 @@ uv pip install -r bridge/requirements.txt   # install bridge runtime deps
 - `bun run dev` – hot reload terminal UI.
 - `bun run start` – production-ish run.
 - `bun run cli:af` – boot CLI wired to the bridge (defaults: `AF_BRIDGE_BASE_URL=http://127.0.0.1:8081`, `AF_MODEL=multi_tier_support`).
-- Env switches: `OPENAI_BASE_URL`, `OPENAI_API_KEY`, `OPENAI_MODEL`, `AF_BRIDGE_BASE_URL`, `AF_MODEL`.
+- Env switches: `OPENAI_BASE_URL`, `OPENAI_API_KEY`, `OPENAI_MODEL`, `LITELLM_BASE_URL`, `LITELLM_API_KEY`, `LITELLM_MODEL`, `LLM_PROVIDER`, `AF_BRIDGE_BASE_URL`, `AF_MODEL`.
 
 ## Settings & Configuration Flow
 - All preferences persist to `~/.qlaw-cli/qlaw_settings.json` (auto-created on first run).
-- `/settings panel` opens the interactive overlay (Core API, UI, Agent Framework sections). Use `↑`/`↓` or `Tab` to select, `Enter` to edit/toggle, `Esc` to close. Running `/settings` without the `panel` suffix prints the summary inline.
+- `/settings panel` opens the interactive overlay (Core API, UI, Coding Agent, Agent Framework sections). Use `↑`/`↓` or `Tab` to select, `Enter` to edit/toggle, `Esc` to close. Running `/settings` without the `panel` suffix prints the summary inline.
 - Text fields open inline prompts that update the stored settings immediately; Agent Framework rows mirror `/af-bridge` + `/af-model`.
 - `workflow.enabled` (toggled via the overlay) controls whether the CLI prefers workflow/agent-framework mode by default.
+ - `tools.enabled` and `tools.autoApprove` control whether tool calls (read/list/write/run) are allowed and whether safe tools auto-run.
 
 ## Keybindings
 - The suggestion list exposes three configurable actions: `nextSuggestion`, `prevSuggestion`, and `autocomplete`.
@@ -36,6 +37,12 @@ uv pip install -r bridge/requirements.txt   # install bridge runtime deps
 - `/af-bridge <url>` and `/af-model <name>` update the per-user defaults without touching `.env`.
 - When both values are present and the CLI is in workflow mode, messages stream via `startWorkflow` (see `src/workflow.ts`).
 - `/agents`, `/workflow`, `/run`, `/continue`, and `/judge` remain the quick helpers for guiding a multi-agent session; combine them with mentions like `@coder` or `@planner` for direct routing.
+
+## Coding Agent Tools
+- Enable with `/tools on` or Settings → Coding Agent.
+- The assistant can request tools using a fenced `tool` JSON block (see `src/tools/prompt.ts`).
+- Safe tools (`read_file`, `list_dir`) can auto-approve; `write_file` and `run_command` always prompt.
+- Permissions follow `allow | ask | deny` and can be adjusted via `/tools perm <tool> <mode>`.
 
 ## Bridge Service (FastAPI)
 ```zsh

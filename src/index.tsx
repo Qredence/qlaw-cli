@@ -12,8 +12,16 @@ import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts.ts";
 import { useSettings } from "./hooks/useSettings.ts";
 import { useSessions } from "./hooks/useSessions.ts";
 import { executeCommand } from "./services/commandService.ts";
-import { formatMessageWithMentions } from "./mentionHandlers.ts";
-import { createStdoutWithDimensions } from "./utils.ts";
+import { formatMessageWithMentionsAsync } from "./mentionHandlers.ts";
+import { createStdoutWithDimensions, generateUniqueId } from "./utils.ts";
+import { buildToolSystemPrompt } from "./tools/prompt.ts";
+import {
+  executeToolCall,
+  formatToolResult,
+  parseToolCalls,
+  type ToolCall,
+} from "./tools/index.ts";
+import { resolveToolPermission } from "./tools/permissions.ts";
 import { SessionList } from "./components/SessionList.tsx";
 import { SettingsMenu } from "./components/SettingsMenu.tsx";
 import { MessageList } from "./components/MessageList.tsx";
@@ -79,6 +87,191 @@ function App() {
   // Prompt state
   const [prompt, setPrompt] = useState<Prompt | null>(null);
   const [promptInputValue, setPromptInputValue] = useState("");
+
+  // Tool execution queue
+  const [toolQueue, setToolQueue] = useState<ToolCall[] | null>(null);
+  const [toolQueueIndex, setToolQueueIndex] = useState(0);
+  const toolResultsRef = useRef<string[]>([]);
+  const toolStepRef = useRef(0);
+  const toolSignatureCountsRef = useRef<Record<string, number>>({});
+
+  const messagesRef = useRef<Message[]>(messages);
+
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
+
+  const appendSystemMessage = useCallback(
+    (content: string) => {
+      setMessages((prev) => [
+        ...prev,
+        { id: generateUniqueId(), role: "system", content, timestamp: new Date() },
+      ]);
+    },
+    [setMessages]
+  );
+
+  const continueWithToolResults = useCallback(() => {
+    if (toolResultsRef.current.length === 0) return;
+    if (isProcessing) return;
+    if (mode === "workflow") {
+      appendSystemMessage("Tool loop is currently only supported in standard mode.");
+      toolResultsRef.current = [];
+      return;
+    }
+
+    const maxSteps = settings.tools?.maxSteps ?? 4;
+    if (toolStepRef.current >= maxSteps) {
+      appendSystemMessage("Max tool steps reached. Please continue manually.");
+      toolResultsRef.current = [];
+      return;
+    }
+
+    toolStepRef.current += 1;
+    const toolSummary = toolResultsRef.current.join("\n\n");
+    toolResultsRef.current = [];
+
+    const toolPrompt = buildToolSystemPrompt(settings);
+    const toolSystemMessage: Message | null = toolPrompt
+      ? {
+          id: generateUniqueId(),
+          role: "system",
+          content: toolPrompt,
+          timestamp: new Date(),
+        }
+      : null;
+
+    const toolResultsMessage: Message = {
+      id: generateUniqueId(),
+      role: "system",
+      content: `Tool results:\n${toolSummary}`,
+      timestamp: new Date(),
+    };
+
+    const continueMessage: Message = {
+      id: generateUniqueId(),
+      role: "user",
+      content:
+        "Continue using the tool results above. If more tools are needed, request them.",
+      timestamp: new Date(),
+    };
+
+    const assistantMessageId = generateUniqueId();
+    const assistantPlaceholder: Message = {
+      id: assistantMessageId,
+      role: "assistant",
+      content: "",
+      timestamp: new Date(),
+    };
+
+    setMessages((prev) => [...prev, assistantPlaceholder]);
+
+    const historyForApi = [
+      ...(toolSystemMessage ? [toolSystemMessage] : []),
+      ...messagesRef.current.filter(
+        (m) => !(m.role === "system" && m.content.startsWith("Tool "))
+      ),
+      toolResultsMessage,
+      continueMessage,
+    ];
+
+    streamResponse({
+      messages: historyForApi,
+      userInput: continueMessage.content,
+      mode: "standard",
+      settings,
+      assistantMessageId,
+      onMessageUpdate: setMessages,
+      onComplete: (id) => {
+        const assistant = messagesRef.current.find((m) => m.id === id);
+        const toolCalls = parseToolCalls(assistant?.content || "");
+        if (toolCalls.length === 0) return;
+        if (!settings.tools?.enabled) {
+          appendSystemMessage(
+            `Tool calls detected (${toolCalls.length}). Enable with /tools on or Settings → Coding Agent.`
+          );
+          return;
+        }
+        setToolQueue(toolCalls);
+        setToolQueueIndex(0);
+      },
+    });
+  }, [appendSystemMessage, isProcessing, mode, settings, streamResponse, setMessages]);
+
+  useEffect(() => {
+    if (!toolQueue || toolQueueIndex >= toolQueue.length) {
+      if (toolQueue && toolQueueIndex >= toolQueue.length) {
+        setToolQueue(null);
+      }
+      return;
+    }
+
+    if (prompt) return;
+
+    const call = toolQueue[toolQueueIndex]!;
+    const toolOptions = {
+      cwd: process.cwd(),
+      maxFileBytes: settings.tools?.maxFileBytes ?? 120_000,
+      maxDirEntries: settings.tools?.maxDirEntries ?? 250,
+      maxOutputChars: settings.tools?.maxOutputChars ?? 12_000,
+    };
+
+    const runTool = async () => {
+      const result = await executeToolCall(call, toolOptions);
+      toolResultsRef.current.push(formatToolResult(result));
+      appendSystemMessage(formatToolResult(result));
+      setToolQueueIndex((i) => i + 1);
+    };
+
+    const signature = JSON.stringify({ tool: call.tool, args: call.args || {} });
+    const count = (toolSignatureCountsRef.current[signature] || 0) + 1;
+    toolSignatureCountsRef.current[signature] = count;
+
+    const permission = resolveToolPermission({
+      settings,
+      call,
+      cwd: toolOptions.cwd,
+      isDoomLoop: count >= 3,
+    });
+
+    if (permission.mode === "deny") {
+      appendSystemMessage(`Skipped tool: ${call.tool} (${permission.reason || "denied"})`);
+      setToolQueueIndex((i) => i + 1);
+      return;
+    }
+
+    if (permission.mode === "allow") {
+      void runTool();
+      return;
+    }
+
+    setPrompt({
+      type: "confirm",
+      message: `Allow tool: ${call.tool}?`,
+      onConfirm: () => {
+        void runTool();
+        setPrompt(null);
+      },
+      onCancel: () => {
+        appendSystemMessage(`Skipped tool: ${call.tool}`);
+        setToolQueueIndex((i) => i + 1);
+        setPrompt(null);
+      },
+    });
+  }, [
+    toolQueue,
+    toolQueueIndex,
+    prompt,
+    settings.tools,
+    appendSystemMessage,
+  ]);
+
+  useEffect(() => {
+    if (!toolQueue && toolQueueIndex > 0 && !prompt) {
+      setToolQueueIndex(0);
+      continueWithToolResults();
+    }
+  }, [toolQueue, toolQueueIndex, prompt, continueWithToolResults]);
 
   // Settings management
   const settingsHook = useSettings({
@@ -211,7 +404,7 @@ function App() {
   );
 
   // Input submission handler
-  const handleSubmit = useCallback(() => {
+  const handleSubmit = useCallback(async () => {
     if (isProcessing) return;
 
     // If suggestions are visible, select the highlighted suggestion
@@ -230,7 +423,12 @@ function App() {
       }
     }
 
-    if (!input.trim()) return;
+    const rawInput = input.trim();
+    if (!rawInput) return;
+
+    toolStepRef.current = 0;
+    toolSignatureCountsRef.current = {};
+    toolResultsRef.current = [];
 
     // Handle commands entered manually
     if (input.startsWith("/")) {
@@ -245,17 +443,15 @@ function App() {
     }
 
     // Format message with mentions if present
-    const formattedInput = formatMessageWithMentions(input.trim());
-
     const userMessage: Message = {
-      id: Date.now().toString(),
+      id: generateUniqueId(),
       role: "user",
-      content: formattedInput,
+      content: rawInput,
       timestamp: new Date(),
     };
 
     // Prepare assistant message placeholder to stream into
-    const assistantMessageId = (Date.now() + 1).toString();
+    const assistantMessageId = generateUniqueId();
     const assistantPlaceholder: Message = {
       id: assistantMessageId,
       role: "assistant",
@@ -263,40 +459,49 @@ function App() {
       timestamp: new Date(),
     };
 
-    // Helper to update the last message efficiently (reduces per-element overhead vs O(n) map)
-    const updateLastMessage = (
-      contentUpdater: (currentContent: string) => string
-    ) => {
-      setMessages((prev) => {
-        if (prev.length === 0) return prev;
-        const lastIndex = prev.length - 1;
-        const lastMessage = prev[lastIndex]!;
-        if (lastMessage.id !== assistantMessageId) return prev;
-
-        const updated = [...prev];
-        updated[lastIndex] = {
-          ...lastMessage,
-          content: contentUpdater(lastMessage!.content),
-        };
-        return updated;
-      });
-    };
-
     // Update UI immediately
     setMessages((prev) => [...prev, userMessage, assistantPlaceholder]);
     setInput("");
 
-    // Build history for this turn
-    const historyForApi = [...messages, userMessage];
+    const formattedInput = await formatMessageWithMentionsAsync(rawInput, {
+      cwd: process.cwd(),
+      maxFileBytes: settings.tools?.maxFileBytes ?? 120_000,
+    });
+    const apiUserMessage: Message = { ...userMessage, content: formattedInput };
+    const toolPrompt = buildToolSystemPrompt(settings);
+    const toolSystemMessage: Message | null = toolPrompt
+      ? {
+          id: generateUniqueId(),
+          role: "system",
+          content: toolPrompt,
+          timestamp: new Date(),
+        }
+      : null;
+    const historyForApi = toolSystemMessage
+      ? [toolSystemMessage, ...messages, apiUserMessage]
+      : [...messages, apiUserMessage];
 
     // Stream response
     streamResponse({
       messages: historyForApi,
-      userInput: input.trim(),
+      userInput: rawInput,
       mode,
       settings,
       assistantMessageId,
       onMessageUpdate: setMessages,
+      onComplete: (id) => {
+        const assistant = messagesRef.current.find((m) => m.id === id);
+        const toolCalls = parseToolCalls(assistant?.content || "");
+        if (toolCalls.length === 0) return;
+        if (!settings.tools?.enabled) {
+          appendSystemMessage(
+            `Tool calls detected (${toolCalls.length}). Enable with /tools on or Settings → Coding Agent.`
+          );
+          return;
+        }
+        setToolQueue(toolCalls);
+        setToolQueueIndex(0);
+      },
     });
   }, [
     isProcessing,
@@ -311,6 +516,7 @@ function App() {
     mode,
     settings,
     streamResponse,
+    appendSystemMessage,
   ]);
 
   // Computed values

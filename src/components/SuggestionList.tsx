@@ -22,6 +22,13 @@ export function SuggestionList({
   colors,
   maxVisible = 8,
 }: SuggestionListProps) {
+  const query = useMemo(() => {
+    if (inputMode === "command" || inputMode === "mention") {
+      return input.slice(1).trim();
+    }
+    return "";
+  }, [inputMode, input]);
+
   const suggestionHeader = useMemo(() => {
     if (inputMode === "command") return "Commands";
     if (inputMode === "mention") return "Mentions";
@@ -48,6 +55,23 @@ export function SuggestionList({
       hasBelow: offset + items.length < suggestions.length,
     };
   }, [suggestions, scrollOffset, maxVisible]);
+
+  const actionHint = useMemo(() => {
+    if (inputMode === "command") return "enter run • tab autocomplete • esc cancel";
+    if (inputMode === "mention") return "enter insert • tab autocomplete • esc cancel";
+    return "";
+  }, [inputMode]);
+
+  const selected = suggestions[selectedIndex];
+
+  function splitMatch(label: string, match: string): [string, string, string] {
+    if (!match) return [label, "", ""];
+    const lower = label.toLowerCase();
+    const q = match.toLowerCase();
+    const idx = lower.indexOf(q);
+    if (idx === -1) return [label, "", ""];
+    return [label.slice(0, idx), label.slice(idx, idx + match.length), label.slice(idx + match.length)];
+  }
 
   if (suggestions.length === 0) {
     return (
@@ -132,6 +156,7 @@ export function SuggestionList({
               : s.kind === "command"
               ? "built-in"
               : "mention";
+          const [before, match, after] = splitMatch(s.label, query);
 
           return (
             <box
@@ -146,14 +171,39 @@ export function SuggestionList({
               }}
             >
               <box style={{ flexDirection: "row", flexShrink: 1 }}>
-                <text
-                  content={`${prefix}${s.label}`}
-                  style={{
-                    fg: isSelected ? colors.text.accent : colors.text.primary,
-                    attributes: isSelected ? TextAttributes.BOLD : 0,
-                    marginRight: 2,
-                  }}
-                />
+                <box style={{ flexDirection: "row" }}>
+                  <text
+                    content={prefix}
+                    style={{
+                      fg: isSelected ? colors.text.accent : colors.text.primary,
+                      attributes: isSelected ? TextAttributes.BOLD : 0,
+                    }}
+                  />
+                  <text
+                    content={before}
+                    style={{
+                      fg: isSelected ? colors.text.accent : colors.text.primary,
+                      attributes: isSelected ? TextAttributes.BOLD : 0,
+                    }}
+                  />
+                  {match && (
+                    <text
+                      content={match}
+                      style={{
+                        fg: colors.text.accent,
+                        attributes: TextAttributes.BOLD,
+                      }}
+                    />
+                  )}
+                  <text
+                    content={after}
+                    style={{
+                      fg: isSelected ? colors.text.accent : colors.text.primary,
+                      attributes: isSelected ? TextAttributes.BOLD : 0,
+                      marginRight: 2,
+                    }}
+                  />
+                </box>
                 {s.description && (
                   <text
                     content={s.description}
@@ -165,12 +215,6 @@ export function SuggestionList({
                 )}
               </box>
               <box style={{ flexDirection: "row" }}>
-                {typeof (s as any).score === "number" && (
-                  <text
-                    content={`score ${(s as any).score}`}
-                    style={{ fg: colors.text.tertiary, attributes: TextAttributes.DIM, marginRight: 2 }}
-                  />
-                )}
                 <text
                   content={kindLabel}
                   style={{ fg: colors.text.tertiary, attributes: TextAttributes.DIM, marginLeft: 2 }}
@@ -187,6 +231,35 @@ export function SuggestionList({
               fg: colors.text.dim,
               attributes: TextAttributes.DIM,
             }}
+          />
+        )}
+      </box>
+
+      <box style={{ marginTop: 1, flexDirection: "column" }}>
+        {selected && (
+          <>
+            <text
+              content={`${inputMode === "command" ? "/" : "@"}${selected.label}`}
+              style={{ fg: colors.text.secondary, attributes: TextAttributes.BOLD }}
+            />
+            {selected.description && (
+              <text
+                content={selected.description}
+                style={{ fg: colors.text.dim, attributes: TextAttributes.DIM }}
+              />
+            )}
+            {selected.keywords && selected.keywords.length > 0 && (
+              <text
+                content={`keywords: ${selected.keywords.join(", ")}`}
+                style={{ fg: colors.text.tertiary, attributes: TextAttributes.DIM }}
+              />
+            )}
+          </>
+        )}
+        {actionHint && (
+          <text
+            content={actionHint}
+            style={{ fg: colors.text.dim, attributes: TextAttributes.DIM, marginTop: 1 }}
           />
         )}
       </box>

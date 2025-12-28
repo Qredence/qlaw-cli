@@ -5,6 +5,7 @@
 
 import { useState, useMemo, useCallback } from "react";
 import type { AppSettings, Prompt } from "../types.ts";
+import { applyProviderDefaults } from "../llm/providerDefaults.ts";
 
 export interface UseSettingsReturn {
   showSettingsMenu: boolean;
@@ -48,7 +49,7 @@ export function useSettings(options: UseSettingsOptions): UseSettingsReturn {
 
   type StringSettingKey = keyof Pick<
     AppSettings,
-    "model" | "endpoint" | "apiKey" | "afBridgeBaseUrl" | "afModel"
+    "model" | "endpoint" | "apiKey" | "afBridgeBaseUrl" | "afModel" | "provider"
   >;
 
   const setStringSetting = useCallback(
@@ -91,16 +92,31 @@ export function useSettings(options: UseSettingsOptions): UseSettingsReturn {
         title: "Core API",
         items: [
           {
+            id: "provider",
+            label: "Provider",
+            value: settings.provider || "Auto",
+            description: "openai | azure | litellm | custom (auto-detect if empty)",
+            type: "text" as const,
+            onActivate: () =>
+              openSettingPrompt({
+                title: "Enter provider (openai, azure, litellm, custom)",
+                currentValue: settings.provider,
+                placeholder: "litellm",
+                onSubmit: (value) =>
+                  setSettings((prev) => applyProviderDefaults(prev, value)),
+              }),
+          },
+          {
             id: "model",
             label: "Model",
             value: settings.model || "Not set",
-            description: "Default model for OpenAI Responses mode",
+            description: "Default model (LiteLLM format supported)",
             type: "text" as const,
             onActivate: () =>
               openSettingPrompt({
                 title: "Enter default model",
                 currentValue: settings.model,
-                placeholder: "gpt-4o-mini",
+                placeholder: "openai/gpt-4o-mini",
                 onSubmit: (value) => setStringSetting("model", value),
               }),
           },
@@ -108,13 +124,13 @@ export function useSettings(options: UseSettingsOptions): UseSettingsReturn {
             id: "endpoint",
             label: "Endpoint",
             value: settings.endpoint || "Not set",
-            description: "Base URL for OpenAI / Azure Responses API",
+            description: "Base URL for OpenAI-compatible Responses API",
             type: "text" as const,
             onActivate: () =>
               openSettingPrompt({
                 title: "Enter API endpoint base URL",
                 currentValue: settings.endpoint,
-                placeholder: "https://api.openai.com/v1",
+                placeholder: "http://localhost:4000/v1",
                 onSubmit: (value) => setStringSetting("endpoint", value),
               }),
           },
@@ -171,6 +187,41 @@ export function useSettings(options: UseSettingsOptions): UseSettingsReturn {
               setSettings((prev) => ({
                 ...prev,
                 autoScroll: !prev.autoScroll,
+              })),
+          },
+        ],
+      },
+      {
+        title: "Coding Agent",
+        items: [
+          {
+            id: "toolsEnabled",
+            label: "Tools",
+            value: settings.tools?.enabled ? "Enabled" : "Disabled",
+            description: "Allow tool calls (permissions via /tools perm)",
+            type: "toggle" as const,
+            onActivate: () =>
+              setSettings((prev) => ({
+                ...prev,
+                tools: {
+                  ...(prev.tools || {}),
+                  enabled: !(prev.tools?.enabled ?? false),
+                },
+              })),
+          },
+          {
+            id: "toolsAutoApprove",
+            label: "Auto-approve",
+            value: settings.tools?.autoApprove ? "Enabled" : "Disabled",
+            description: "Auto-run safe tools (read/list); write/run still prompt",
+            type: "toggle" as const,
+            onActivate: () =>
+              setSettings((prev) => ({
+                ...prev,
+                tools: {
+                  ...(prev.tools || {}),
+                  autoApprove: !(prev.tools?.autoApprove ?? false),
+                },
               })),
           },
         ],
@@ -249,4 +300,3 @@ export function useSettings(options: UseSettingsOptions): UseSettingsReturn {
     openSettingPrompt,
   };
 }
-

@@ -11,6 +11,7 @@ import type {
 import { generateUniqueId } from "./utils.ts";
 import { defaultKeybindings } from "./storage.ts";
 import { listAgents } from "./api.ts";
+import { applyProviderDefaults } from "./llm/providerDefaults.ts";
 import { exec } from "child_process";
 import { promisify } from "util";
 
@@ -89,9 +90,11 @@ settings
   /settings            Open settings panel
   /keybindings [...]   View or edit keybindings
 ai
+  /provider <name>     Set provider (openai/azure/litellm/custom)
   /model <name>        Set model
   /endpoint <url>      Set API base URL
   /api-key <key>       Set API key
+  /tools [args]        Toggle tool execution (on/off/auto, perm ...)
   /af-bridge <url>     Set Agent Framework bridge
   /af-model <name>     Set Agent Framework model
 foundry
@@ -192,7 +195,7 @@ export function handleJudgeCommand(): CommandResult {
 }
 
 function handleSettingCommand(
-  settingKey: "model" | "endpoint" | "apiKey" | "afBridgeBaseUrl" | "afModel" | "foundryEndpoint",
+  settingKey: "model" | "provider" | "endpoint" | "apiKey" | "afBridgeBaseUrl" | "afModel" | "foundryEndpoint",
   promptMessage: string,
   confirmationFormatter: (value: string) => string,
   args: string | undefined,
@@ -232,6 +235,27 @@ export function handleModelCommand(
     args,
     context
   );
+}
+
+export function handleProviderCommand(
+  args: string | undefined,
+  context: CommandContext
+): CommandResult {
+  const { setSettings, settings } = context;
+  const val = args?.trim();
+  if (val) {
+    setSettings((prev) => applyProviderDefaults(prev, val));
+    const systemMsg: Message = {
+      id: generateUniqueId(),
+      role: "system",
+      content: `Provider set to: ${val} (defaults updated when available)`,
+      timestamp: new Date(),
+    };
+    return { systemMessage: systemMsg };
+  }
+  const currentValue = settings.provider || "Auto";
+  const msg = `Enter provider (openai, azure, litellm, custom):\nCurrent: ${currentValue}\nUsage: /provider <value>`;
+  return { systemMessage: { id: generateUniqueId(), role: "system", content: msg, timestamp: new Date() } };
 }
 
 export function handleEndpointCommand(
@@ -276,20 +300,184 @@ export function handleSettingsCommand(
     role: "system",
     content: `Settings
 Model:        ${settings.model || "Not set"}
+Provider:     ${settings.provider || "Auto"}
 Endpoint:     ${settings.endpoint || "Not set"}
 API Key:      ${settings.apiKey ? "***" + settings.apiKey.slice(-4) : "Not set"}
 Theme:        ${settings.theme}
 Timestamps:   ${settings.showTimestamps ? "Shown" : "Hidden"}
 Auto-scroll:  ${settings.autoScroll ? "Enabled" : "Disabled"}
+Tools:        ${settings.tools?.enabled ? "Enabled" : "Disabled"}
 Agent Bridge: ${settings.afBridgeBaseUrl || "Not set"}
 AF Model:     ${settings.afModel || "Not set"}
 Workflow:     ${settings.workflow?.enabled ? "Enabled" : "Disabled"}
 
-Use /model, /endpoint, /api-key, /theme, /keybindings, /af-bridge, /af-model to change values
+Use /provider, /model, /endpoint, /api-key, /theme, /keybindings, /tools, /af-bridge, /af-model to change values
 Type "/settings panel" to open the interactive menu`,
     timestamp: new Date(),
   };
   return { systemMessage: systemMsg };
+}
+
+export function handleToolsCommand(
+  args: string | undefined,
+  context: CommandContext
+): CommandResult {
+  const { settings, setSettings } = context;
+  const trimmed = (args || "").trim().toLowerCase();
+
+  if (!trimmed) {
+    const status = settings.tools?.enabled ? "Enabled" : "Disabled";
+    const auto = settings.tools?.autoApprove ? "Enabled" : "Disabled";
+    const perms = settings.tools?.permissions || {};
+    const permSummary = [
+      `read_file=${perms.read_file || "allow"}`,
+      `list_dir=${perms.list_dir || "allow"}`,
+      `write_file=${perms.write_file || "ask"}`,
+      `run_command=${perms.run_command || "ask"}`,
+      `external_directory=${perms.external_directory || "ask"}`,
+      `doom_loop=${perms.doom_loop || "ask"}`,
+    ].join(" ");
+    return {
+      systemMessage: {
+        id: generateUniqueId(),
+        role: "system",
+        content: `Tools: ${status}\nAuto-approve: ${auto}\nPermissions: ${permSummary}\nUsage: /tools on|off|auto [on|off]\n       /tools perm <tool> <allow|ask|deny>`,
+        timestamp: new Date(),
+      },
+    };
+  }
+
+  const parts = trimmed.split(/\s+/);
+  const sub = parts[0] || "";
+
+  if (sub === "perm" || sub === "permission") {
+    const rawTool = parts[1];
+    const rawMode = parts[2];
+    if (!rawTool || !rawMode) {
+      return {
+        systemMessage: {
+          id: generateUniqueId(),
+          role: "system",
+          content: "Usage: /tools perm <tool> <allow|ask|deny>",
+          timestamp: new Date(),
+        },
+      };
+    }
+    const toolMap: Record<string, string> = {
+      read: "read_file",
+      read_file: "read_file",
+      list: "list_dir",
+      list_dir: "list_dir",
+      write: "write_file",
+      write_file: "write_file",
+      run: "run_command",
+      run_command: "run_command",
+      external: "external_directory",
+      external_directory: "external_directory",
+      doom: "doom_loop",
+      doom_loop: "doom_loop",
+    };
+    const toolKey = toolMap[rawTool];
+    if (!toolKey) {
+      return {
+        systemMessage: {
+          id: generateUniqueId(),
+          role: "system",
+          content: `Unknown tool: ${rawTool}`,
+          timestamp: new Date(),
+        },
+      };
+    }
+    if (!["allow", "ask", "deny"].includes(rawMode)) {
+      return {
+        systemMessage: {
+          id: generateUniqueId(),
+          role: "system",
+          content: "Mode must be allow, ask, or deny.",
+          timestamp: new Date(),
+        },
+      };
+    }
+    setSettings((prev) => ({
+      ...prev,
+      tools: {
+        ...(prev.tools || {}),
+        permissions: {
+          ...(prev.tools?.permissions || {}),
+          [toolKey]: rawMode,
+        },
+      },
+    }));
+    return {
+      systemMessage: {
+        id: generateUniqueId(),
+        role: "system",
+        content: `Permission set: ${toolKey}=${rawMode}`,
+        timestamp: new Date(),
+      },
+    };
+  }
+
+  if (sub === "on" || sub === "enable" || sub === "enabled") {
+    setSettings((prev) => ({
+      ...prev,
+      tools: { ...(prev.tools || {}), enabled: true },
+    }));
+    return {
+      systemMessage: {
+        id: generateUniqueId(),
+        role: "system",
+        content: "Tools enabled.",
+        timestamp: new Date(),
+      },
+    };
+  }
+
+  if (sub === "off" || sub === "disable" || sub === "disabled") {
+    setSettings((prev) => ({
+      ...prev,
+      tools: { ...(prev.tools || {}), enabled: false },
+    }));
+    return {
+      systemMessage: {
+        id: generateUniqueId(),
+        role: "system",
+        content: "Tools disabled.",
+        timestamp: new Date(),
+      },
+    };
+  }
+
+  if (sub === "auto") {
+    const desired = parts[1] || "toggle";
+    const nextValue =
+      desired === "on"
+        ? true
+        : desired === "off"
+        ? false
+        : !(settings.tools?.autoApprove ?? false);
+    setSettings((prev) => ({
+      ...prev,
+      tools: { ...(prev.tools || {}), autoApprove: nextValue },
+    }));
+    return {
+      systemMessage: {
+        id: generateUniqueId(),
+        role: "system",
+        content: `Auto-approve ${nextValue ? "enabled" : "disabled"}.`,
+        timestamp: new Date(),
+      },
+    };
+  }
+
+  return {
+    systemMessage: {
+      id: generateUniqueId(),
+      role: "system",
+      content: "Usage: /tools on|off|auto [on|off]",
+      timestamp: new Date(),
+    },
+  };
 }
 
 export function handleAfBridgeCommand(
@@ -640,11 +828,13 @@ export function handleStatusCommand(
     content: `Current Configuration:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Model:        ${settings.model || "Not set"}
+Provider:     ${settings.provider || "Auto"}
 Endpoint:     ${settings.endpoint || "Not set"}
 API Key:      ${settings.apiKey ? "***" + settings.apiKey.slice(-4) : "Not set"}
 Theme:        ${settings.theme}
 Timestamps:   ${settings.showTimestamps ? "Shown" : "Hidden"}
 Auto-scroll:  ${settings.autoScroll ? "Enabled" : "Disabled"}
+Tools:        ${settings.tools?.enabled ? "Enabled" : "Disabled"}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Sessions:     ${sessions.length} saved
 Messages:     ${messages.length} in current chat

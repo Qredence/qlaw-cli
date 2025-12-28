@@ -69,6 +69,9 @@ function processSSEEvent(
       payload?.text ??
       payload?.content ??
       payload?.output_text?.delta ??
+      payload?.choices?.[0]?.delta?.content ??
+      payload?.choices?.[0]?.text ??
+      payload?.choices?.[0]?.message?.content ??
       "";
     if (delta) {
       try {
@@ -191,4 +194,3 @@ export async function parseSSEStream(
     processSSELines(parts, handlers, currentEvent);
   }
 }
-

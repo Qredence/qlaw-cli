@@ -9,6 +9,38 @@ interface MessageListProps {
   colors: ThemeTokens;
 }
 
+type Segment =
+  | { type: "text"; content: string }
+  | { type: "code"; content: string; lang: string };
+
+function splitIntoSegments(content: string): Segment[] {
+  const segments: Segment[] = [];
+  const regex = /```(\\w+)?\\n([\\s\\S]*?)```/g;
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = regex.exec(content)) !== null) {
+    if (match.index > lastIndex) {
+      const text = content.slice(lastIndex, match.index);
+      if (text.trim()) segments.push({ type: "text", content: text });
+    }
+    const lang = match[1] ? match[1] : "plaintext";
+    segments.push({ type: "code", content: match[2] || "", lang });
+    lastIndex = match.index + match[0].length;
+  }
+
+  if (lastIndex < content.length) {
+    const text = content.slice(lastIndex);
+    if (text.trim()) segments.push({ type: "text", content: text });
+  }
+
+  if (segments.length === 0) {
+    segments.push({ type: "text", content });
+  }
+
+  return segments;
+}
+
 export function MessageList({
   messages,
   isProcessing,
@@ -62,30 +94,33 @@ export function MessageList({
               alignItems: "flex-start",
             }}
           >
-            <box
-              style={{
-                backgroundColor: isUser ? colors.bg.hover : "transparent",
-                padding: isUser ? 0 : 1,
-                border: isUser,
-                borderColor: colors.border,
-              }}
-            >
-              {message.content.includes("```") ? (
-                (() => {
-                  const m = message.content.match(/```(\w+)?\n([\s\S]*?)```/);
-                  const code = m ? m[2] : message.content.replace(/```/g, "");
-                  const ft = m && m[1] ? m[1] : "plaintext";
+          <box
+            style={{
+              backgroundColor: isUser ? colors.bg.hover : "transparent",
+              padding: isUser ? 0 : 1,
+              border: isUser,
+              borderColor: colors.border,
+            }}
+          >
+            <box flexDirection="column" style={{ width: "100%" }}>
+              {splitIntoSegments(message.content).map((seg, idx) => {
+                if (seg.type === "code") {
                   return (
-                    <code content={code} filetype={ft} syntaxStyle={syntaxStyle} />
+                    <box key={`${message.id}-code-${idx}`} style={{ marginBottom: 1 }}>
+                      <code content={seg.content} filetype={seg.lang} syntaxStyle={syntaxStyle} />
+                    </box>
                   );
-                })()
-              ) : (
-                <text
-                  content={message.content}
-                  style={{ fg: isUser ? colors.text.primary : colors.text.secondary }}
-                />
-              )}
+                }
+                return (
+                  <text
+                    key={`${message.id}-text-${idx}`}
+                    content={seg.content}
+                    style={{ fg: isUser ? colors.text.primary : colors.text.secondary }}
+                  />
+                );
+              })}
             </box>
+          </box>
             <text
               content={
                 isUser
