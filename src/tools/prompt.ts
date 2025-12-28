@@ -12,6 +12,7 @@ export function buildToolSystemPrompt(settings: AppSettings): string | null {
     "```",
     "You may also pass an array: {\"tools\":[{...}, {...}]}",
     "Available tools: read_file, list_dir, write_file, run_command.",
+    "run_command executes shell commands and is dangerous; only request it when explicitly necessary.",
     "Only request tools you need to complete the task.",
   ].join("\n");
 }

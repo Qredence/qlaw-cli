@@ -154,6 +154,7 @@ Type `@` for contextual references:
 - `@file <path>` - Reference a file in your message
 - `@code <snippet>` - Include a code snippet in your message
 - `@docs <topic>` - Reference documentation in your message
+- `@code function example() { return true; }` will format as a code snippet
 
 Mentions are automatically formatted to provide structured context to the AI. For example:
 
@@ -164,7 +165,7 @@ Mentions are automatically formatted to provide structured context to the AI. Fo
 
 When `/tools` is enabled, the assistant can request tool execution using fenced `tool` blocks.
 Permissions follow `allow | ask | deny` and can be configured via `/tools perm`.
-- `@code function example() { return true; }` will format as a code snippet
+`run_command` executes shell commands and should only be enabled when you trust the model.
 
 ### Keyboard Shortcuts
 

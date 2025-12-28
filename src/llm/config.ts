@@ -18,43 +18,43 @@ function normalizeProvider(value: string | undefined): LlmProvider | undefined {
   return undefined;
 }
 
-function inferProvider(
-  baseUrl: string | undefined,
-  model: string | undefined
-): LlmProvider {
-  const url = baseUrl || "";
-
-  let hostname: string | undefined;
+function coerceUrl(value: string | undefined): URL | null {
+  if (!value) return null;
   try {
-    if (url) {
-      // Use built-in URL parser when an absolute URL is provided.
-      const parsed = new URL(url);
-      hostname = parsed.hostname.toLowerCase();
-    }
+    return new URL(value);
   } catch {
-    // Ignore parse errors; hostname will remain undefined and we will
-    // fall back to non-hostname heuristics below.
-  }
-
-  if (hostname) {
-    const host = hostname;
-    // Azure OpenAI endpoints are typically of the form:
-    //   {resource-name}.openai.azure.com
-    // Treat such hosts, or direct azure.com hosts, as Azure.
-    if (
-      host === "azure.com" ||
-      host.endsWith(".azure.com") ||
-      host.includes(".openai.azure.com")
-    ) {
-      return "azure";
+    try {
+      return new URL(`https://${value}`);
+    } catch {
+      return null;
     }
-  } else if (url.includes("/openai/")) {
-    // When we cannot reliably determine the hostname (e.g. relative URLs),
-    // fall back to path-based heuristics only.
-    return "azure";
   }
+}
 
-  if (url.includes("litellm") || url.includes("/llm/") || (model && model.includes("/"))) return "litellm";
+function getHost(value: string | undefined): string | null {
+  const parsed = coerceUrl(value);
+  return parsed ? parsed.hostname.toLowerCase() : null;
+}
+
+function getPathname(value: string | undefined): string {
+  const parsed = coerceUrl(value);
+  return parsed ? parsed.pathname : "";
+}
+
+function isAzureHost(value: string | undefined): boolean {
+  const host = getHost(value);
+  if (!host) return false;
+  return host === "azure.com" || host.endsWith(".azure.com");
+}
+
+function inferProvider(baseUrl: string | undefined, model: string | undefined): LlmProvider {
+  if (isAzureHost(baseUrl)) return "azure";
+  const host = getHost(baseUrl) || "";
+  const path = getPathname(baseUrl);
+  if (host.includes("litellm") || path.includes("/llm/") || (model && model.includes("/"))) {
+    // Model slash heuristic covers LiteLLM-style prefixes (openai/, anthropic/, etc.).
+    return "litellm";
+  }
   return "litellm";
 }
 
@@ -89,9 +89,9 @@ export function resolveLlmConfig(settings?: AppSettings): LlmConfig | null {
     apiKey = settings?.apiKey || env.openaiApiKey;
     model = settings?.model || env.openaiModel;
   } else {
-    baseUrl = settings?.endpoint || env.openaiBaseUrl || env.litellmBaseUrl;
-    apiKey = settings?.apiKey || env.openaiApiKey || env.litellmApiKey;
-    model = settings?.model || env.openaiModel || env.litellmModel;
+    baseUrl = settings?.endpoint;
+    apiKey = settings?.apiKey;
+    model = settings?.model;
   }
 
   const resolvedBaseUrl = baseUrl;
@@ -107,7 +107,7 @@ export function resolveLlmConfig(settings?: AppSettings): LlmConfig | null {
 }
 
 export function getAuthHeader(config: LlmConfig): Record<string, string> {
-  if (config.provider === "azure" || config.baseUrl.includes("/openai/") || config.baseUrl.includes("azure.com")) {
+  if (config.provider === "azure" || isAzureHost(config.baseUrl)) {
     return { "api-key": config.apiKey };
   }
   return { Authorization: `Bearer ${config.apiKey}` };

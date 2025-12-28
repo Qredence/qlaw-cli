@@ -29,7 +29,7 @@ export async function streamResponseFromOpenAI(params: {
   const config = resolveLlmConfig(settings);
   if (!config) {
     onError(
-      new Error("Missing endpoint, API key, or model. Configure /endpoint, /api-key, and /model.")
+      new Error("Missing endpoint, API key, or model. Configure /provider, /endpoint, /api-key, and /model.")
     );
     onDone();
     return;

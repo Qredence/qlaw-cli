@@ -20,6 +20,20 @@ import { promisify } from "util";
 const execAsync = promisify(exec);
 const CUSTOM_SELECT_VALUE = "__custom__";
 const AUTO_SELECT_VALUE = "__auto__";
+const TOOL_PERMISSION_MAP: Record<string, string> = {
+  read: "read_file",
+  read_file: "read_file",
+  list: "list_dir",
+  list_dir: "list_dir",
+  write: "write_file",
+  write_file: "write_file",
+  run: "run_command",
+  run_command: "run_command",
+  external: "external_directory",
+  external_directory: "external_directory",
+  doom: "doom_loop",
+  doom_loop: "doom_loop",
+};
 
 function dedupeSelectOptions(options: PromptSelectOption[]): PromptSelectOption[] {
   const seen = new Set<string>();
@@ -599,21 +613,7 @@ export function handleToolsCommand(
         },
       };
     }
-    const toolMap: Record<string, string> = {
-      read: "read_file",
-      read_file: "read_file",
-      list: "list_dir",
-      list_dir: "list_dir",
-      write: "write_file",
-      write_file: "write_file",
-      run: "run_command",
-      run_command: "run_command",
-      external: "external_directory",
-      external_directory: "external_directory",
-      doom: "doom_loop",
-      doom_loop: "doom_loop",
-    };
-    const toolKey = toolMap[rawTool];
+    const toolKey = TOOL_PERMISSION_MAP[rawTool];
     if (!toolKey) {
       return {
         systemMessage: {

@@ -15,7 +15,7 @@ type Segment =
 
 function splitIntoSegments(content: string): Segment[] {
   const segments: Segment[] = [];
-  const regex = /```(\\w+)?\\n([\\s\\S]*?)```/g;
+  const regex = /```(\w+)?(?:\n|\s)([\s\S]*?)```/g;
   let lastIndex = 0;
   let match: RegExpExecArray | null;
 

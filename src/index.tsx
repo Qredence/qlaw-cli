@@ -170,7 +170,11 @@ function App() {
     const historyForApi = [
       ...(toolSystemMessage ? [toolSystemMessage] : []),
       ...messagesRef.current.filter(
-        (m) => !(m.role === "system" && m.content.startsWith("Tool "))
+        (m) =>
+          !(
+            m.role === "system" &&
+            (m.content.startsWith("Tool ") || m.content.startsWith("Skipped tool"))
+          )
       ),
       toolResultsMessage,
       continueMessage,
@@ -246,9 +250,21 @@ function App() {
       return;
     }
 
+    const argsObject = call.args || {};
+    const hasArgs = Object.keys(argsObject).length > 0;
+    let argsPreview = hasArgs ? JSON.stringify(argsObject, null, 2) : "no arguments";
+    const MAX_PREVIEW_LENGTH = 200;
+    if (argsPreview.length > MAX_PREVIEW_LENGTH) {
+      argsPreview = argsPreview.slice(0, MAX_PREVIEW_LENGTH) + "…";
+    }
+    const permissionMessage =
+      `Allow tool "${call.tool}" to run?\n` +
+      `cwd: ${toolOptions.cwd}\n` +
+      `args: ${argsPreview}`;
+
     setPrompt({
       type: "confirm",
-      message: `Allow tool: ${call.tool}?`,
+      message: permissionMessage,
       onConfirm: () => {
         void runTool();
         setPrompt(null);

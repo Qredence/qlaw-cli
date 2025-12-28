@@ -11,11 +11,32 @@ function normalizeProvider(provider?: string): LlmProvider | undefined {
   return undefined;
 }
 
+function coerceUrl(value: string | undefined): URL | null {
+  if (!value) return null;
+  try {
+    return new URL(value);
+  } catch {
+    try {
+      return new URL(`https://${value}`);
+    } catch {
+      return null;
+    }
+  }
+}
+
+function getHost(value: string | undefined): string | null {
+  const parsed = coerceUrl(value);
+  return parsed ? parsed.hostname.toLowerCase() : null;
+}
+
 function isOpenAIEndpoint(endpoint: string | undefined, envOpenaiBase: string | undefined): boolean {
   if (!endpoint) return true;
-  if (envOpenaiBase && endpoint === envOpenaiBase) return true;
+  const host = getHost(endpoint);
+  if (!host) return false;
+  const envHost = getHost(envOpenaiBase);
+  if (envHost && host === envHost) return true;
   if (endpoint === DEFAULT_OPENAI_BASE_URL) return true;
-  return endpoint.includes("api.openai.com");
+  return host === "api.openai.com";
 }
 
 function looksLikeOpenAIModel(model: string | undefined, envOpenaiModel: string | undefined): boolean {

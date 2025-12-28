@@ -4,7 +4,7 @@
  */
 
 import { readFile } from "fs/promises";
-import { resolve, extname } from "path";
+import { resolve, extname, relative, isAbsolute } from "path";
 
 export type MentionType =
   | "context"
@@ -159,6 +159,9 @@ async function formatMentionAsync(
 
   try {
     const fullPath = resolve(options.cwd, path);
+    if (isExternalPath(fullPath, options.cwd)) {
+      return `[File Reference: ${path}]\n\nUnable to read file (outside working directory).`;
+    }
     const file = await readFile(fullPath);
     const limited = file.length > options.maxFileBytes ? file.subarray(0, options.maxFileBytes) : file;
     const text = limited.toString("utf-8");
@@ -168,6 +171,12 @@ async function formatMentionAsync(
   } catch (e: any) {
     return `[File Reference: ${path}]\n\nUnable to read file (${e?.message || e}). Please verify the path.`;
   }
+}
+
+function isExternalPath(targetPath: string, cwd: string): boolean {
+  const rel = relative(cwd, targetPath);
+  if (!rel) return false;
+  return rel.startsWith("..") || isAbsolute(rel);
 }
 
 function guessLanguage(path: string): string {

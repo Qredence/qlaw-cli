@@ -91,6 +91,7 @@ export type UISuggestion = {
   description?: string;
   kind: "command" | "custom-command" | "mention";
   score?: number;
+  // Optional keywords to improve fuzzy matching relevance.
   keywords?: string[];
   requiresValue?: boolean;
 };
