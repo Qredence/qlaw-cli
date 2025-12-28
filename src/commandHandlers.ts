@@ -362,7 +362,7 @@ function handleSettingCommand(
     selectOptions?: PromptSelectOption[];
   }
 ): CommandResult {
-  const { settings, setSettings, setMessages, setPrompt } = context;
+  const { settings, setMessages, setPrompt } = context;
   const val = args?.trim();
   const applyValue =
     options?.applyValue ||
